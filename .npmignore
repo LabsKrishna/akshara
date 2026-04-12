@@ -1,0 +1,9 @@
+test-basic.js
+test-versioning.js
+sampleDB.js
+data.dbx
+data.dbx.tmp
+CLAUDE.md
+.env
+*.log
+TEMP_CHANGELOG.md

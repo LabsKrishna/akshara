@@ -1,0 +1,87 @@
+// remote.js — HTTP client for a running Database X server
+// Mirrors the lib API surface so you can swap in-process ↔ remote by changing one line.
+"use strict";
+
+/**
+ * Connect to a Database X HTTP server.
+ * @param {string} baseUrl — default: "http://localhost:3000"
+ * @returns {object} client with the same method names as the core engine
+ *
+ * @example
+ * const { connect } = require('database-x/remote');
+ * const db = connect('http://localhost:3000');
+ * await db.ingest('The meeting is at 3pm');
+ * const results = await db.query('when is the meeting?');
+ */
+function connect(baseUrl = "http://localhost:3000") {
+  const base = baseUrl.replace(/\/$/, "");
+
+  async function post(path, body) {
+    const res  = await fetch(`${base}${path}`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.detail || data.error || res.statusText), { code: data.error });
+    return data;
+  }
+
+  async function get(path) {
+    const res  = await fetch(`${base}${path}`);
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.detail || data.error || res.statusText), { code: data.error });
+    return data;
+  }
+
+  async function del(path) {
+    const res  = await fetch(`${base}${path}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.detail || data.error || res.statusText), { code: data.error });
+    return data;
+  }
+
+  return {
+    ingest:           (text, opts = {})               => post("/ingest", { text, ...opts }),
+    remember:         (text, opts = {})               => post("/remember", { text, ...opts }),
+    ingestBatch:      (items)                         => post("/ingest/batch", { items }),
+    ingestTimeSeries: (label, points, opts = {})      => post("/ingest/timeseries", { label, points, ...opts }),
+    ingestFile:       (filePath, opts = {})           => post("/ingest/file", { filePath, ...opts }),
+    query:            (text, opts = {})               => post("/query", { text, ...opts }),
+    get:              (id)                            => get(`/entity/${id}`),
+    getMany:          (ids)                           => post("/entities/batch", { ids }),
+    remove:           (id)                            => del(`/entity/${id}`),
+    getHistory:       (id)                            => get(`/history/${id}`),
+    listEntities:     (opts = {})                     => {
+      const params = new URLSearchParams(
+        Object.entries(opts).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
+      );
+      return get(`/entities?${params}`);
+    },
+    getGraph:         ()                              => get("/graph"),
+    traverse:         (id, depth = 1)                => get(`/traverse/${id}?depth=${depth}`),
+    getStatus:        ()                              => get("/status"),
+
+    /**
+     * Create a remote agent helper. Returns the same AgentMemory-like interface
+     * backed by the server's /agent/* endpoints.
+     *
+     * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
+     * @returns {Promise<object>} remote agent proxy
+     */
+    async createAgent(opts) {
+      const { agentId } = await post("/agent/create", opts);
+      return {
+        name: opts.name,
+        agentId,
+        remember:         (text, o = {}) => post(`/agent/${agentId}/remember`, { text, ...o }),
+        update:           (text, o = {}) => post(`/agent/${agentId}/update`, { text, ...o }),
+        recall:           (text, o = {}) => post(`/agent/${agentId}/recall`, { text, ...o }),
+        getHistory:       (entityId)     => get(`/agent/${agentId}/history/${entityId}`),
+        getContradictions:(entityId)     => get(`/agent/${agentId}/contradictions/${entityId}`),
+      };
+    },
+  };
+}
+
+module.exports = { connect };

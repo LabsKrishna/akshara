@@ -1,0 +1,115 @@
+// agent.js — Lightweight agent helper for Database X
+// A thin, opinionated wrapper that gives agents a clean, high-level interface
+// for durable memory. Completely optional — the raw API works just as well.
+"use strict";
+
+/**
+ * Create an AgentMemory instance backed by a Database X engine.
+ *
+ * @param {object} engine — the core lib (index.js exports) or a remote client
+ * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
+ * @returns {AgentMemory}
+ *
+ * @example
+ * const dbx = require("database-x");
+ * await dbx.init({ ... });
+ * const agent = dbx.createAgent({ name: "budget-planner" });
+ * await agent.remember("Q2 budget is 2.4M");
+ * await agent.update("Q2 budget is now 2.7M");
+ * const results = await agent.recall("Q2 budget");
+ */
+class AgentMemory {
+  /**
+   * @param {object} engine — object with remember/query/getHistory methods
+   * @param {object} opts
+   * @param {string} opts.name — agent identity (stored in provenance)
+   * @param {string} [opts.defaultClassification="internal"]
+   * @param {string[]} [opts.defaultTags=[]]
+   * @param {boolean} [opts.useLLM=false] — enable LLM enrichment by default for this agent
+   */
+  constructor(engine, { name, defaultClassification = "internal", defaultTags = [], useLLM = false }) {
+    if (!name) throw new Error("agent name is required");
+    if (!engine) throw new Error("engine is required");
+    this._engine = engine;
+    this.name = name;
+    this.defaultClassification = defaultClassification;
+    this.defaultTags = Array.isArray(defaultTags) ? [...defaultTags] : [];
+    this.useLLM = !!useLLM;
+  }
+
+  /**
+   * Build the source object for this agent.
+   * @returns {{ type: "agent", actor: string }}
+   */
+  _source() {
+    return { type: "agent", actor: this.name };
+  }
+
+  /**
+   * Merge caller opts with agent defaults.
+   * @param {object} opts
+   * @returns {object}
+   */
+  _mergeOpts(opts = {}) {
+    return {
+      ...opts,
+      source: opts.source || this._source(),
+      classification: opts.classification || this.defaultClassification,
+      tags: Array.from(new Set([...this.defaultTags, ...(opts.tags || [])])),
+      useLLM: opts.useLLM !== undefined ? opts.useLLM : this.useLLM,
+    };
+  }
+
+  /**
+   * Store a new fact or update an existing one (version detection is automatic).
+   * @param {string} text
+   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
+   * @returns {Promise<number>} stable entity ID
+   */
+  async remember(text, opts = {}) {
+    return this._engine.remember(text, this._mergeOpts(opts));
+  }
+
+  /**
+   * Alias for remember() — makes intent explicit when updating a known fact.
+   * @param {string} text
+   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
+   * @returns {Promise<number>} stable entity ID
+   */
+  async update(text, opts = {}) {
+    return this.remember(text, opts);
+  }
+
+  /**
+   * Recall memories matching a query. Supports time-travel via asOf.
+   * @param {string} text — natural language query
+   * @param {{ limit?, filter?, asOf? }} [opts]
+   * @returns {Promise<{ count, results, filter, asOf, config }>}
+   */
+  async recall(text, opts = {}) {
+    return this._engine.query(text, opts);
+  }
+
+  /**
+   * Get the full version history and provenance trail for an entity.
+   * @param {number} id — entity ID
+   * @returns {Promise<object>} history object with versions array
+   */
+  async getHistory(id) {
+    return this._engine.getHistory(id);
+  }
+
+  /**
+   * Inspect contradictions across all versions of an entity.
+   * Returns an array of versions that have contradicts === true.
+   * @param {number} id — entity ID
+   * @returns {Promise<{ id, contradictions: object[] }>}
+   */
+  async getContradictions(id) {
+    const history = await this._engine.getHistory(id);
+    const contradictions = ((history && history.versions) || []).filter(v => v.delta?.contradicts);
+    return { id, contradictions };
+  }
+}
+
+module.exports = { AgentMemory };

@@ -1,0 +1,43 @@
+{
+  "name": "database-x",
+  "version": "0.1.0",
+  "description": "Durable, private, time-aware memory engine for long-running AI agents",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./server": "./server.js",
+    "./remote": "./remote.js"
+  },
+  "bin": {
+    "dbx": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-basic.js && node test-versioning.js",
+    "bench": "node bench/agent-memory/run-all.js"
+  },
+  "keywords": "ai-agent-memory,temporal-memory,local-first,versioned-recall",
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.15.0",
+    "express": "^5.2.1"
+  },
+  "files": [
+    "index.js",
+    "server.js",
+    "remote.js",
+    "kernel.js",
+    "versioning.js",
+    "worker-pool.js",
+    "worker.js",
+    "bin/cli.js",
+    "errors.js",
+    "agent.js",
+    "dashboard.html"
+  ]
+}

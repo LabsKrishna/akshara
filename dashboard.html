@@ -1,0 +1,931 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-mono, monospace); background: transparent; }
+
+  .shell {
+    border: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    border-radius: var(--border-radius-lg, 10px);
+    overflow: hidden;
+    background: var(--color-background-primary, #fff);
+  }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    background: var(--color-background-secondary, #f7f6f3);
+  }
+  .logo { font-size: 13px; font-weight: 500; color: var(--color-text-primary, #1a1a18); letter-spacing: .08em; }
+  .logo span { color: #1D9E75; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #1D9E75; display: inline-block; margin-right: 6px; }
+  .status-label { font-size: 11px; color: var(--color-text-secondary, #6b6b68); }
+
+  .nav {
+    display: flex; overflow-x: auto;
+    border-bottom: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    background: var(--color-background-secondary, #f7f6f3);
+  }
+  .nav-btn {
+    padding: 8px 14px; font-size: 12px; font-family: var(--font-mono, monospace);
+    color: var(--color-text-secondary, #6b6b68); background: none;
+    border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+    transition: color .15s;
+  }
+  .nav-btn.active { color: #1D9E75; border-bottom-color: #1D9E75; }
+  .nav-btn:hover:not(.active) { color: var(--color-text-primary, #1a1a18); }
+
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+
+  /* metrics */
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 16px; }
+  .metric { background: var(--color-background-secondary, #f7f6f3); border-radius: var(--border-radius-md, 6px); padding: 12px 14px; }
+  .metric-label { font-size: 11px; color: var(--color-text-secondary, #6b6b68); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 500; color: var(--color-text-primary, #1a1a18); }
+  .metric-sub { font-size: 11px; color: var(--color-text-tertiary, #a0a09c); margin-top: 2px; }
+
+  /* type breakdown */
+  .type-breakdown { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+
+  /* badges */
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 999px; font-family: var(--font-mono, monospace); }
+  .badge-v  { background: #E1F5EE; color: #0F6E56; }
+  .badge-l  { background: #E6F1FB; color: #185FA5; }
+  .type-text       { background: #F1EFE8; color: #5F5E5A; }
+  .type-document   { background: #E6F1FB; color: #185FA5; }
+  .type-image      { background: #FAEEDA; color: #854F0B; }
+  .type-audio      { background: #F3E8FA; color: #6B3BAA; }
+  .type-video      { background: #FAE8E8; color: #9B2E2E; }
+  .type-timeseries { background: #E1F5EE; color: #0F6E56; }
+  .type-file       { background: #F1EFE8; color: #5F5E5A; }
+
+  /* sections */
+  .section-label { font-size: 11px; color: var(--color-text-secondary, #6b6b68); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+
+  /* entity list */
+  .entity-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .entity-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px;
+    border: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    border-radius: var(--border-radius-md, 6px);
+    cursor: pointer; transition: background .12s;
+  }
+  .entity-row:hover { background: var(--color-background-secondary, #f7f6f3); }
+  .entity-id { font-size: 10px; color: var(--color-text-tertiary, #a0a09c); padding-top: 2px; min-width: 56px; }
+  .entity-text { font-size: 13px; color: var(--color-text-primary, #1a1a18); flex: 1; line-height: 1.5; }
+  .entity-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 56px; }
+
+  /* forms */
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-label { font-size: 11px; color: var(--color-text-secondary, #6b6b68); }
+  textarea, input[type=text], input[type=number], select {
+    font-family: var(--font-mono, monospace); font-size: 13px; width: 100%;
+    border: 0.5px solid var(--color-border-secondary, #c8c7c3);
+    border-radius: var(--border-radius-md, 6px);
+    padding: 8px 10px;
+    background: var(--color-background-primary, #fff);
+    color: var(--color-text-primary, #1a1a18);
+    resize: vertical;
+  }
+  textarea { min-height: 72px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  /* buttons */
+  .action-btn {
+    padding: 8px 16px; font-size: 12px; font-family: var(--font-mono, monospace);
+    border: 0.5px solid var(--color-border-secondary, #c8c7c3);
+    border-radius: var(--border-radius-md, 6px);
+    background: var(--color-background-primary, #fff);
+    color: var(--color-text-primary, #1a1a18);
+    cursor: pointer; transition: background .12s;
+  }
+  .action-btn:hover { background: var(--color-background-secondary, #f7f6f3); }
+  .action-btn.primary { background: #0F6E56; color: #E1F5EE; border-color: #0F6E56; }
+  .action-btn.primary:hover { background: #085041; }
+  .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* result box */
+  .result-box {
+    border: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    border-radius: var(--border-radius-md, 6px);
+    background: var(--color-background-secondary, #f7f6f3);
+    padding: 10px 12px; font-size: 12px; color: var(--color-text-secondary, #6b6b68);
+    min-height: 48px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  }
+  .result-box.ok  { color: #0F6E56; }
+  .result-box.err { color: #993C1D; }
+
+  /* version timeline */
+  .version-timeline { display: flex; flex-direction: column; gap: 0; }
+  .v-entry { display: flex; gap: 12px; padding: 10px 0; border-bottom: 0.5px solid var(--color-border-tertiary, #e0e0dc); }
+  .v-entry:last-child { border-bottom: none; }
+  .v-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: 4px; min-width: 16px; }
+  .v-dot { width: 8px; height: 8px; border-radius: 50%; background: #1D9E75; flex-shrink: 0; }
+  .v-dot.origin { background: #888780; }
+  .v-line { width: 1px; flex: 1; background: var(--color-border-tertiary, #e0e0dc); margin-top: 4px; }
+  .v-body { flex: 1; }
+  .v-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  .v-num { font-size: 10px; color: var(--color-text-tertiary, #a0a09c); }
+  .v-ts  { font-size: 10px; color: var(--color-text-tertiary, #a0a09c); }
+  .delta-pill { font-size: 10px; padding: 1px 7px; border-radius: 999px; font-family: var(--font-mono, monospace); }
+  .delta-update     { background: #E1F5EE; color: #0F6E56; }
+  .delta-correction { background: #E6F1FB; color: #185FA5; }
+  .delta-addition   { background: #FAEEDA; color: #854F0B; }
+  .delta-drift      { background: #FAECE7; color: #993C1D; }
+  .delta-patch      { background: #F1EFE8; color: #5F5E5A; }
+  .v-text    { font-size: 13px; color: var(--color-text-primary, #1a1a18); line-height: 1.5; margin-bottom: 4px; }
+  .v-summary { font-size: 11px; color: var(--color-text-secondary, #6b6b68); font-style: italic; }
+  .shift-bar-wrap { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+  .shift-bar-bg { flex: 1; height: 3px; background: var(--color-border-tertiary, #e0e0dc); border-radius: 2px; overflow: hidden; }
+  .shift-bar-fill { height: 100%; border-radius: 2px; background: #1D9E75; transition: width .3s; }
+  .shift-label { font-size: 10px; color: var(--color-text-tertiary, #a0a09c); min-width: 36px; text-align: right; }
+
+  /* graph */
+  .graph-canvas { width: 100%; border: 0.5px solid var(--color-border-tertiary, #e0e0dc); border-radius: var(--border-radius-md, 6px); background: var(--color-background-secondary, #f7f6f3); }
+
+  /* empty state */
+  .empty-state { text-align: center; padding: 32px 16px; color: var(--color-text-tertiary, #a0a09c); font-size: 12px; }
+
+  /* search / filter row */
+  .search-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .search-row input[type=text] { flex: 1; min-width: 0; }
+
+  /* filter chips */
+  .filter-chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .chip {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    border: 0.5px solid var(--color-border-secondary, #c8c7c3);
+    background: var(--color-background-primary, #fff);
+    color: var(--color-text-secondary, #6b6b68);
+    cursor: pointer; font-family: var(--font-mono, monospace);
+    transition: background .1s;
+  }
+  .chip.active { background: #0F6E56; color: #E1F5EE; border-color: #0F6E56; }
+
+  /* result cards */
+  .result-card {
+    border: 0.5px solid var(--color-border-tertiary, #e0e0dc);
+    border-radius: var(--border-radius-md, 6px);
+    padding: 10px 12px; margin-bottom: 6px;
+  }
+  .result-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .score-bar-bg { height: 3px; background: var(--color-border-tertiary, #e0e0dc); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .score-bar-fill { height: 100%; border-radius: 2px; background: #1D9E75; }
+
+  /* ingest type sections */
+  .ingest-type-section { display: none; flex-direction: column; gap: 10px; }
+  .ingest-type-section.active { display: flex; }
+
+  /* pagination */
+  .pagination { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 12px; }
+  .page-info { font-size: 11px; color: var(--color-text-tertiary, #a0a09c); }
+
+  /* graph legend */
+  .graph-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary, #6b6b68); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<div class="shell">
+  <div class="topbar">
+    <span class="logo">DB<span>X</span> · Database X</span>
+    <span class="status-label"><span class="status-dot"></span><span id="status-text">engine ready</span></span>
+  </div>
+
+  <div class="nav">
+    <button class="nav-btn active" data-tab="overview"  onclick="switchTab('overview',  this)">overview</button>
+    <button class="nav-btn"        data-tab="entities"  onclick="switchTab('entities',  this)">entities</button>
+    <button class="nav-btn"        data-tab="ingest"    onclick="switchTab('ingest',    this)">ingest</button>
+    <button class="nav-btn"        data-tab="query"     onclick="switchTab('query',     this)">query</button>
+    <button class="nav-btn"        data-tab="history"   onclick="switchTab('history',   this)">history</button>
+    <button class="nav-btn"        data-tab="graph"     onclick="switchTab('graph',     this)">graph</button>
+  </div>
+
+  <!-- ── OVERVIEW ──────────────────────────────────────────────────────────── -->
+  <div id="tab-overview" class="panel active">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">entities</div>
+        <div class="metric-value" id="m-entities">—</div>
+        <div class="metric-sub">in store</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">versions</div>
+        <div class="metric-value" id="m-versions">—</div>
+        <div class="metric-sub">total snapshots</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">links</div>
+        <div class="metric-value" id="m-links">—</div>
+        <div class="metric-sub">graph edges</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">types</div>
+        <div class="metric-value" id="m-types">—</div>
+        <div class="metric-sub">modalities</div>
+      </div>
+    </div>
+
+    <div class="section-label">type breakdown</div>
+    <div class="type-breakdown" id="type-breakdown" style="margin-bottom:16px">
+      <span style="font-size:12px;color:var(--color-text-tertiary,#a0a09c)">loading…</span>
+    </div>
+
+    <div class="section-label">recent entities</div>
+    <div class="entity-list" id="entity-list">
+      <div class="empty-state">no entities yet — ingest some data to get started</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="action-btn" onclick="refreshOverview()">refresh</button>
+      <button class="action-btn" onclick="switchTab('ingest', document.querySelector('[data-tab=ingest]'))">+ ingest data ↗</button>
+    </div>
+  </div>
+
+  <!-- ── ENTITIES ──────────────────────────────────────────────────────────── -->
+  <div id="tab-entities" class="panel">
+    <div class="filter-chips" id="ent-type-chips">
+      <div class="chip active" onclick="setEntitiesTypeFilter(null, this)">all</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('text', this)">text</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('document', this)">document</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('image', this)">image</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('audio', this)">audio</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('video', this)">video</div>
+      <div class="chip" onclick="setEntitiesTypeFilter('timeseries', this)">timeseries</div>
+    </div>
+
+    <div class="search-row">
+      <input type="text" id="ent-search" placeholder="search by tag (comma separated)…" style="flex:1">
+      <input type="number" id="ent-limit" value="20" style="width:60px">
+      <button class="action-btn primary" onclick="loadEntities(1)">load ↗</button>
+    </div>
+
+    <div id="entities-list">
+      <div class="empty-state">click load to browse entities</div>
+    </div>
+
+    <div class="pagination" id="ent-pagination" style="display:none">
+      <button class="action-btn" onclick="entPage(-1)">← prev</button>
+      <span class="page-info" id="ent-page-info"></span>
+      <button class="action-btn" onclick="entPage(+1)">next →</button>
+    </div>
+  </div>
+
+  <!-- ── INGEST ────────────────────────────────────────────────────────────── -->
+  <div id="tab-ingest" class="panel">
+    <div class="row-2" style="margin-bottom:10px">
+      <div class="field-group">
+        <div class="field-label">data type</div>
+        <select id="ingest-type" onchange="onIngestTypeChange()">
+          <option value="text">text</option>
+          <option value="document">document</option>
+          <option value="image">image</option>
+          <option value="audio">audio</option>
+          <option value="video">video</option>
+          <option value="timeseries">time series</option>
+          <option value="file">file (local path)</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">server url</div>
+        <input type="text" id="server-url" value="http://localhost:3000">
+      </div>
+    </div>
+
+    <!-- TEXT / DOCUMENT / IMAGE / AUDIO / VIDEO -->
+    <div class="ingest-type-section active" id="section-text">
+      <div class="field-group">
+        <div class="field-label">content</div>
+        <textarea id="ingest-text" placeholder="Enter text, description, or metadata…"></textarea>
+      </div>
+      <div class="row-2">
+        <div class="field-group">
+          <div class="field-label">tags (comma separated)</div>
+          <input type="text" id="ingest-tags" placeholder="tag1, tag2, …">
+        </div>
+        <div class="field-group">
+          <div class="field-label">timestamp (optional)</div>
+          <input type="number" id="ingest-ts" placeholder="unix ms">
+        </div>
+      </div>
+    </div>
+
+    <!-- TIME SERIES -->
+    <div class="ingest-type-section" id="section-timeseries">
+      <div class="field-group">
+        <div class="field-label">series label</div>
+        <input type="text" id="ts-label" placeholder="e.g. CPU usage, stock price, temperature">
+      </div>
+      <div class="field-group">
+        <div class="field-label">data points — JSON array of {"timestamp": ms, "value": number}</div>
+        <textarea id="ts-points" placeholder='[{"timestamp":1700000000000,"value":42.5},{"timestamp":1700003600000,"value":44.1}]' style="min-height:100px"></textarea>
+      </div>
+      <div class="row-2">
+        <div class="field-group">
+          <div class="field-label">tags (comma separated)</div>
+          <input type="text" id="ts-tags" placeholder="sensor, daily">
+        </div>
+        <div class="field-group">
+          <div class="field-label">unit (optional metadata)</div>
+          <input type="text" id="ts-unit" placeholder="e.g. %, ms, USD">
+        </div>
+      </div>
+      <div class="btn-row" style="margin-bottom:4px">
+        <button class="action-btn" onclick="fillSampleTimeSeries()">load sample</button>
+      </div>
+    </div>
+
+    <!-- FILE PATH -->
+    <div class="ingest-type-section" id="section-file">
+      <div class="field-group">
+        <div class="field-label">local file path</div>
+        <input type="text" id="file-path" placeholder="/Users/you/documents/report.md">
+      </div>
+      <div class="field-group">
+        <div class="field-label">tags (comma separated)</div>
+        <input type="text" id="file-tags" placeholder="report, 2025">
+      </div>
+      <div style="font-size:11px;color:var(--color-text-tertiary,#a0a09c)">Supported: .txt .md .csv .json .jpg .png .mp3 .mp4 and more</div>
+    </div>
+
+    <div class="btn-row" style="margin-top:6px">
+      <button class="action-btn primary" onclick="doIngest()">ingest ↗</button>
+      <button class="action-btn" onclick="clearIngest()">clear</button>
+    </div>
+    <div style="margin-top:8px">
+      <div class="field-label" style="margin-bottom:4px">result</div>
+      <div class="result-box" id="ingest-result">waiting…</div>
+    </div>
+
+    <div class="section-label" style="margin-top:14px">quick examples</div>
+    <div class="filter-chips">
+      <div class="chip" onclick="loadExample(0)">price update</div>
+      <div class="chip" onclick="loadExample(1)">ceo note</div>
+      <div class="chip" onclick="loadExample(2)">product launch</div>
+      <div class="chip" onclick="loadExample(3)">research finding</div>
+    </div>
+  </div>
+
+  <!-- ── QUERY ─────────────────────────────────────────────────────────────── -->
+  <div id="tab-query" class="panel">
+    <div class="search-row">
+      <input type="text" id="query-text" placeholder="how has raw material cost changed? (NL filters like 'last week' work)">
+      <input type="number" id="query-limit" value="5" style="width:56px">
+      <button class="action-btn primary" onclick="doQuery()">search ↗</button>
+    </div>
+
+    <div class="section-label">type filter (optional)</div>
+    <div class="filter-chips" id="query-type-chips" style="margin-bottom:14px">
+      <div class="chip active" onclick="setQueryType(null, this)">all types</div>
+      <div class="chip" onclick="setQueryType('text', this)">text</div>
+      <div class="chip" onclick="setQueryType('document', this)">document</div>
+      <div class="chip" onclick="setQueryType('image', this)">image</div>
+      <div class="chip" onclick="setQueryType('audio', this)">audio</div>
+      <div class="chip" onclick="setQueryType('timeseries', this)">timeseries</div>
+    </div>
+
+    <div id="query-results">
+      <div class="empty-state">run a query to see results</div>
+    </div>
+  </div>
+
+  <!-- ── HISTORY ───────────────────────────────────────────────────────────── -->
+  <div id="tab-history" class="panel">
+    <div class="search-row">
+      <input type="text" id="history-id" placeholder="entity id…">
+      <button class="action-btn primary" onclick="doHistory()">load ↗</button>
+    </div>
+    <div id="history-results">
+      <div class="empty-state">enter an entity id to view version history</div>
+    </div>
+  </div>
+
+  <!-- ── GRAPH ─────────────────────────────────────────────────────────────── -->
+  <div id="tab-graph" class="panel">
+    <div class="section-label">knowledge graph — force-directed layout</div>
+    <canvas class="graph-canvas" id="graph-canvas" height="300"></canvas>
+    <div class="graph-legend" id="graph-legend"></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="action-btn" onclick="drawGraph()">redraw</button>
+      <span style="font-size:11px;color:var(--color-text-tertiary,#a0a09c)">nodes = entities · edges = similarity links · color = type</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  base:       () => (document.getElementById('server-url') || { value: 'http://localhost:3000' }).value.trim() || 'http://localhost:3000',
+  queryType:  null,
+  entType:    null,
+  entPage:    1,
+  entTotal:   0,
+  entPages:   1,
+};
+
+const EXAMPLES = [
+  "Raw material costs $200 per unit in Q1 2024. Supply chain stable.",
+  "The CEO of the company is Sarah Chen, appointed in January 2024.",
+  "We launched our new AI-powered analytics platform targeting enterprise customers.",
+  "New research shows that hybrid architectures outperform pure vector DBs for multi-modal workloads.",
+];
+
+const TYPE_COLORS = {
+  text:       '#5F5E5A',
+  document:   '#185FA5',
+  image:      '#854F0B',
+  audio:      '#6B3BAA',
+  video:      '#9B2E2E',
+  timeseries: '#0F6E56',
+  file:       '#888780',
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function typeBadge(type) {
+  return `<span class="badge type-${type||'text'}">${type||'text'}</span>`;
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const d = Date.now() - ts;
+  if (d < 60000)         return 'just now';
+  if (d < 3600000)       return Math.floor(d/60000)   + 'm ago';
+  if (d < 86400000)      return Math.floor(d/3600000) + 'h ago';
+  return Math.floor(d/86400000) + 'd ago';
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(S.base() + path, opts);
+  return res.json();
+}
+
+function setResult(id, text, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className   = 'result-box ' + (ok ? 'ok' : 'err');
+}
+
+// ── Tab Switching ─────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'overview') refreshOverview();
+  if (id === 'graph')    drawGraph();
+  if (id === 'entities') loadEntities(1);
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+async function refreshOverview() {
+  try {
+    const s = await apiFetch('/status');
+    document.getElementById('m-entities').textContent = s.entities  || 0;
+    document.getElementById('m-versions').textContent = s.totalVersions || 0;
+    document.getElementById('m-links').textContent    = s.totalLinks || 0;
+    document.getElementById('m-types').textContent    = Object.keys(s.byType || {}).length;
+
+    const bd = document.getElementById('type-breakdown');
+    if (s.byType && Object.keys(s.byType).length) {
+      bd.innerHTML = Object.entries(s.byType).map(([t, n]) =>
+        `<span class="badge type-${t}">${t}: ${n}</span>`
+      ).join('');
+    } else {
+      bd.innerHTML = '<span style="font-size:12px;color:var(--color-text-tertiary,#a0a09c)">no data yet</span>';
+    }
+
+    const entData = await apiFetch('/entities?limit=15');
+    const list = document.getElementById('entity-list');
+    if (!entData.entities || entData.entities.length === 0) {
+      list.innerHTML = '<div class="empty-state">no entities yet</div>';
+      return;
+    }
+    list.innerHTML = entData.entities.map(e =>
+      `<div class="entity-row" onclick="loadEntityHistory(${e.id})">
+        <div class="entity-id">${String(e.id).slice(-6)}</div>
+        <div class="entity-text">${e.text.slice(0, 80)}${e.text.length > 80 ? '…' : ''}</div>
+        <div class="entity-meta">
+          ${typeBadge(e.type)}
+          <span class="badge badge-v">${e.versionCount}v</span>
+          <span style="font-size:10px;color:var(--color-text-tertiary,#a0a09c)">${timeAgo(e.updatedAt)}</span>
+        </div>
+      </div>`
+    ).join('');
+  } catch(e) {
+    document.getElementById('entity-list').innerHTML = '<div class="empty-state">server offline — start with: node index.js</div>';
+  }
+}
+
+// ── Entities Tab ──────────────────────────────────────────────────────────────
+function setEntitiesTypeFilter(type, el) {
+  S.entType = type;
+  document.querySelectorAll('#ent-type-chips .chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  loadEntities(1);
+}
+
+async function loadEntities(page) {
+  S.entPage = page || 1;
+  const tags  = (document.getElementById('ent-search').value || '').trim();
+  const limit = document.getElementById('ent-limit').value || 20;
+
+  let url = `/entities?page=${S.entPage}&limit=${limit}`;
+  if (S.entType) url += `&type=${S.entType}`;
+  if (tags)      url += `&tags=${encodeURIComponent(tags)}`;
+
+  const list  = document.getElementById('entities-list');
+  const pagin = document.getElementById('ent-pagination');
+  list.innerHTML = '<div class="empty-state">loading…</div>';
+
+  try {
+    const d = await apiFetch(url);
+    S.entTotal = d.total || 0;
+    S.entPages = d.pages || 1;
+
+    if (!d.entities || d.entities.length === 0) {
+      list.innerHTML = '<div class="empty-state">no entities found</div>';
+      pagin.style.display = 'none';
+      return;
+    }
+
+    list.innerHTML = d.entities.map(e => `
+      <div class="entity-row" onclick="loadEntityHistory(${e.id})">
+        <div class="entity-id">${String(e.id).slice(-6)}</div>
+        <div class="entity-text">
+          ${e.text.slice(0, 100)}${e.text.length > 100 ? '…' : ''}
+          ${e.tags && e.tags.length ? '<br><span style="font-size:10px;color:var(--color-text-tertiary,#a0a09c)">' + e.tags.join(', ') + '</span>' : ''}
+        </div>
+        <div class="entity-meta">
+          ${typeBadge(e.type)}
+          <span class="badge badge-v">${e.versionCount}v</span>
+          <span class="badge badge-l">${e.linkCount}L</span>
+          <span style="font-size:10px;color:var(--color-text-tertiary,#a0a09c)">${timeAgo(e.updatedAt)}</span>
+        </div>
+      </div>`
+    ).join('');
+
+    document.getElementById('ent-page-info').textContent = `page ${S.entPage} / ${S.entPages}  ·  ${S.entTotal} total`;
+    pagin.style.display = S.entPages > 1 ? 'flex' : 'none';
+  } catch(e) {
+    list.innerHTML = '<div class="empty-state">server offline</div>';
+  }
+}
+
+function entPage(delta) {
+  const next = S.entPage + delta;
+  if (next < 1 || next > S.entPages) return;
+  loadEntities(next);
+}
+
+// ── Ingest Tab ────────────────────────────────────────────────────────────────
+function onIngestTypeChange() {
+  const type = document.getElementById('ingest-type').value;
+  document.querySelectorAll('.ingest-type-section').forEach(s => s.classList.remove('active'));
+
+  if (type === 'timeseries') {
+    document.getElementById('section-timeseries').classList.add('active');
+  } else if (type === 'file') {
+    document.getElementById('section-file').classList.add('active');
+  } else {
+    document.getElementById('section-text').classList.add('active');
+  }
+}
+
+function loadExample(i) {
+  document.getElementById('ingest-type').value = 'text';
+  onIngestTypeChange();
+  document.getElementById('ingest-text').value = EXAMPLES[i];
+}
+
+function fillSampleTimeSeries() {
+  document.getElementById('ts-label').value = 'Server response time (ms)';
+  document.getElementById('ts-unit').value  = 'ms';
+  const now    = Date.now();
+  const points = [];
+  for (let i = 0; i < 24; i++) {
+    points.push({ timestamp: now - (23 - i) * 3600000, value: +(80 + Math.random() * 40).toFixed(1) });
+  }
+  document.getElementById('ts-points').value = JSON.stringify(points, null, 2);
+}
+
+function clearIngest() {
+  document.getElementById('ingest-text').value  = '';
+  document.getElementById('ingest-tags').value  = '';
+  document.getElementById('ingest-ts').value    = '';
+  document.getElementById('ts-label').value     = '';
+  document.getElementById('ts-points').value    = '';
+  document.getElementById('ts-unit').value      = '';
+  document.getElementById('file-path').value    = '';
+  document.getElementById('file-tags').value    = '';
+  setResult('ingest-result', 'waiting…', true);
+}
+
+async function doIngest() {
+  const type = document.getElementById('ingest-type').value;
+  setResult('ingest-result', 'ingesting…', true);
+
+  try {
+    let body, endpoint = '/ingest';
+
+    if (type === 'timeseries') {
+      const label = document.getElementById('ts-label').value.trim();
+      const unit  = document.getElementById('ts-unit').value.trim();
+      const raw   = document.getElementById('ts-points').value.trim();
+      if (!label) return setResult('ingest-result', 'label is required', false);
+      if (!raw)   return setResult('ingest-result', 'points are required', false);
+      let points;
+      try { points = JSON.parse(raw); } catch { return setResult('ingest-result', 'invalid JSON for points', false); }
+      const tags = parseTags(document.getElementById('ts-tags').value);
+      body     = { label, points, metadata: unit ? { unit } : {}, tags };
+      endpoint = '/ingest/timeseries';
+
+    } else if (type === 'file') {
+      const filePath = document.getElementById('file-path').value.trim();
+      if (!filePath) return setResult('ingest-result', 'filePath is required', false);
+      const tags = parseTags(document.getElementById('file-tags').value);
+      body     = { filePath, tags };
+      endpoint = '/ingest/file';
+
+    } else {
+      const text = document.getElementById('ingest-text').value.trim();
+      if (!text) return setResult('ingest-result', 'content is required', false);
+      const ts   = document.getElementById('ingest-ts').value;
+      const tags = parseTags(document.getElementById('ingest-tags').value);
+      body = { text, type, tags };
+      if (ts) body.timestamp = Number(ts);
+    }
+
+    const d = await apiFetch(endpoint, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    if (d.success) setResult('ingest-result', `ok · entity id: ${d.id}`, true);
+    else           setResult('ingest-result', 'error: ' + (d.detail || d.error), false);
+  } catch(e) {
+    setResult('ingest-result', 'could not reach server — is Database X running on ' + S.base() + '?', false);
+  }
+}
+
+function parseTags(str) {
+  return (str || '').split(',').map(t => t.trim()).filter(Boolean);
+}
+
+// ── Query Tab ─────────────────────────────────────────────────────────────────
+function setQueryType(type, el) {
+  S.queryType = type;
+  document.querySelectorAll('#query-type-chips .chip').forEach(c => c.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+async function doQuery() {
+  const text  = document.getElementById('query-text').value.trim();
+  const limit = Number(document.getElementById('query-limit').value) || 5;
+  if (!text) return;
+
+  const el = document.getElementById('query-results');
+  el.innerHTML = '<div class="empty-state">searching…</div>';
+
+  try {
+    const body = { text, limit };
+    if (S.queryType) body.filter = { type: S.queryType };
+
+    const d = await apiFetch('/query', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    const filterInfo = d.filter && Object.keys(d.filter).length
+      ? `<div style="font-size:11px;color:var(--color-text-tertiary,#a0a09c);margin-bottom:8px">applied filters: ${JSON.stringify(d.filter)}</div>`
+      : '';
+
+    if (!d.results || d.results.length === 0) {
+      el.innerHTML = filterInfo + '<div class="empty-state">no results above score threshold</div>';
+      return;
+    }
+
+    el.innerHTML = filterInfo + d.results.map(res => {
+      const pct = Math.min(Math.round(res.score * 100), 100);
+      return `<div class="result-card">
+        <div class="result-card-header">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--color-text-tertiary,#a0a09c)">${res.id}</span>
+            ${typeBadge(res.type)}
+          </div>
+          <span style="font-size:12px;color:#0F6E56;font-weight:500">${res.score.toFixed(3)}</span>
+        </div>
+        <div style="font-size:13px;color:var(--color-text-primary,#1a1a18);line-height:1.5">${res.text.slice(0, 160)}${res.text.length > 160 ? '…' : ''}</div>
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+        <div style="font-size:10px;color:var(--color-text-tertiary,#a0a09c);margin-top:4px">semantic: ${res.semantic} · score: ${res.score}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">could not reach server</div>';
+  }
+}
+
+// ── History Tab ───────────────────────────────────────────────────────────────
+async function doHistory() {
+  const id = document.getElementById('history-id').value.trim();
+  if (!id) return;
+
+  const el = document.getElementById('history-results');
+  el.innerHTML = '<div class="empty-state">loading…</div>';
+
+  try {
+    const d = await apiFetch('/history/' + id);
+    if (d.error) { el.innerHTML = '<div class="empty-state">' + d.error + '</div>'; return; }
+
+    const header = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      ${typeBadge(d.type)}
+      ${d.tags && d.tags.length ? d.tags.map(t => `<span class="badge" style="background:#F1EFE8;color:#5F5E5A">${t}</span>`).join('') : ''}
+      <span style="font-size:11px;color:var(--color-text-tertiary,#a0a09c)">created ${new Date(d.createdAt).toLocaleDateString()}</span>
+    </div>`;
+
+    const vs = d.versions || [];
+    if (!vs.length) { el.innerHTML = header + '<div class="empty-state">no versions</div>'; return; }
+
+    el.innerHTML = header + '<div class="version-timeline">' + vs.map((v, i) => {
+      const isLast  = i === vs.length - 1;
+      const dt      = v.timestamp ? new Date(v.timestamp).toLocaleDateString() : '—';
+      const deltaPill = v.delta
+        ? `<span class="delta-pill delta-${v.delta.type}">${v.delta.type}</span>`
+        : `<span class="delta-pill delta-patch">origin</span>`;
+      const barW    = v.delta ? Math.min(Math.round(v.delta.semanticShift * 500), 100) : 0;
+      const shiftHtml = v.delta
+        ? `<div class="shift-bar-wrap"><div class="shift-bar-bg"><div class="shift-bar-fill" style="width:${barW}%"></div></div><span class="shift-label">Δ ${v.delta.semanticShift}</span></div>`
+        : '';
+      return `<div class="v-entry">
+        <div class="v-dot-col">
+          <div class="v-dot${i === 0 ? ' origin' : ''}"></div>
+          ${!isLast ? '<div class="v-line"></div>' : ''}
+        </div>
+        <div class="v-body">
+          <div class="v-meta"><span class="v-num">v${v.version}</span><span class="v-ts">${dt}</span>${deltaPill}</div>
+          <div class="v-text">${v.text.slice(0, 120)}${v.text.length > 120 ? '…' : ''}</div>
+          ${v.delta ? `<div class="v-summary">${v.delta.summary}</div>` : ''}
+          ${shiftHtml}
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">could not reach server</div>';
+  }
+}
+
+function loadEntityHistory(id) {
+  document.getElementById('history-id').value = id;
+  switchTab('history', document.querySelector('[data-tab=history]'));
+  doHistory();
+}
+
+// ── Graph Tab ─────────────────────────────────────────────────────────────────
+async function drawGraph() {
+  const canvas = document.getElementById('graph-canvas');
+  const ctx    = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 600;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  let graphData;
+  try {
+    graphData = await apiFetch('/graph');
+  } catch(e) {
+    ctx.fillStyle = '#888'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('server offline', W/2, H/2);
+    return;
+  }
+
+  const { nodes, edges } = graphData;
+  if (!nodes || nodes.length === 0) {
+    ctx.fillStyle = '#888'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('no entities to display', W/2, H/2);
+    return;
+  }
+
+  // ── Force-directed layout ──
+  const pad = 40;
+  nodes.forEach((n, i) => {
+    const angle = (2 * Math.PI * i / nodes.length) - Math.PI / 2;
+    const r = Math.min(W, H) * 0.35;
+    n.x  = W/2 + r * Math.cos(angle);
+    n.y  = H/2 + r * Math.sin(angle);
+    n.vx = 0; n.vy = 0;
+  });
+
+  const nodeMap = {};
+  nodes.forEach(n => nodeMap[n.id] = n);
+  const k = Math.sqrt((W * H) / Math.max(nodes.length, 1)) * 0.7;
+
+  for (let iter = 0; iter < 120; iter++) {
+    const t = Math.pow(1 - iter / 120, 2);
+    nodes.forEach(n => { n.fx = 0; n.fy = 0; });
+
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x || 0.1;
+        const dy = nodes[j].y - nodes[i].y || 0.1;
+        const d  = Math.sqrt(dx*dx + dy*dy) || 0.1;
+        const f  = k * k / d;
+        nodes[i].fx -= f * dx / d; nodes[i].fy -= f * dy / d;
+        nodes[j].fx += f * dx / d; nodes[j].fy += f * dy / d;
+      }
+    }
+
+    // Attraction (edges)
+    edges.forEach(e => {
+      const a = nodeMap[e.source], b = nodeMap[e.target];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d  = Math.sqrt(dx*dx + dy*dy) || 0.1;
+      const f  = d * d / k;
+      a.fx += f * dx / d; a.fy += f * dy / d;
+      b.fx -= f * dx / d; b.fy -= f * dy / d;
+    });
+
+    // Center gravity
+    nodes.forEach(n => {
+      n.fx += (W/2 - n.x) * 0.01;
+      n.fy += (H/2 - n.y) * 0.01;
+    });
+
+    // Apply
+    nodes.forEach(n => {
+      const mag  = Math.sqrt(n.fx*n.fx + n.fy*n.fy) || 0.01;
+      const disp = Math.min(mag, W * t * 0.08);
+      n.x += n.fx / mag * disp;
+      n.y += n.fy / mag * disp;
+      n.x = Math.max(pad, Math.min(W - pad, n.x));
+      n.y = Math.max(pad, Math.min(H - pad, n.y));
+    });
+  }
+
+  // ── Draw edges ──
+  edges.forEach(e => {
+    const a = nodeMap[e.source], b = nodeMap[e.target];
+    if (!a || !b) return;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = 'rgba(29,158,117,0.25)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+  });
+
+  // ── Draw nodes ──
+  nodes.forEach(n => {
+    const rad   = 5 + Math.min(n.linkCount, 8) * 1.2 + Math.min(n.versionCount, 5) * 0.5;
+    const color = TYPE_COLORS[n.type] || '#888';
+
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, rad, 0, 2 * Math.PI);
+    ctx.fillStyle   = color + '33';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+
+    // center dot
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 2.5, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // label
+    ctx.fillStyle  = 'rgba(60,60,58,0.85)';
+    ctx.font       = '9px monospace';
+    ctx.textAlign  = 'center';
+    ctx.fillText(n.label.slice(0, 20), n.x, n.y + rad + 11);
+  });
+
+  // ── Legend ──
+  const types = [...new Set(nodes.map(n => n.type))];
+  document.getElementById('graph-legend').innerHTML = types.map(t =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${TYPE_COLORS[t]||'#888'}"></div>${t}</div>`
+  ).join('');
+}
+
+// ── Status polling ────────────────────────────────────────────────────────────
+async function pingStatus() {
+  try {
+    await apiFetch('/status');
+    document.getElementById('status-text').textContent = 'engine ready';
+    document.querySelector('.status-dot').style.background = '#1D9E75';
+  } catch(e) {
+    document.getElementById('status-text').textContent = 'offline';
+    document.querySelector('.status-dot').style.background = '#CC3A1A';
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+pingStatus();
+refreshOverview();
+setInterval(pingStatus, 30000);
+</script>
