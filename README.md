@@ -1,2 +1,2 @@
 # dbx
-Agent memory database-X
+Agent memory-OS database-X
