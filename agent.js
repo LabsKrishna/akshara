@@ -11,7 +11,7 @@
  * @returns {AgentMemory}
  *
  * @example
- * const dbx = require("database-x");
+ * const dbx = require("dbx-memory");
  * await dbx.init({ ... });
  * const agent = dbx.createAgent({ name: "budget-planner" });
  * await agent.remember("Q2 budget is 2.4M");
@@ -67,7 +67,9 @@ class AgentMemory {
    * @returns {Promise<number>} stable entity ID
    */
   async remember(text, opts = {}) {
-    return this._engine.remember(text, this._mergeOpts(opts));
+    const merged = this._mergeOpts(opts);
+    if (opts.allowedWorkspaces) merged.allowedWorkspaces = opts.allowedWorkspaces;
+    return this._engine.remember(text, merged);
   }
 
   /**
@@ -87,7 +89,7 @@ class AgentMemory {
    * @returns {Promise<{ count, results, filter, asOf, config }>}
    */
   async recall(text, opts = {}) {
-    return this._engine.query(text, opts);
+    return this._engine.query(text, { ...opts, allowedWorkspaces: opts.allowedWorkspaces });
   }
 
   /**
@@ -97,6 +99,19 @@ class AgentMemory {
    */
   async getHistory(id) {
     return this._engine.getHistory(id);
+  }
+
+  /**
+   * Extract discrete facts from raw text and ingest each as a separate memory.
+   * Requires factExtractFn to be configured via init().
+   * @param {string} text — raw text (meeting notes, paragraphs, etc.)
+   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
+   * @returns {Promise<{ facts: string[], ids: number[] }>}
+   */
+  async learnFrom(text, opts = {}) {
+    const merged = this._mergeOpts(opts);
+    if (opts.allowedWorkspaces) merged.allowedWorkspaces = opts.allowedWorkspaces;
+    return this._engine.extractFacts(text, merged);
   }
 
   /**

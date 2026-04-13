@@ -1,6 +1,6 @@
 {
-  "name": "database-x",
-  "version": "0.1.0",
+  "name": "dbx-memory",
+  "version": "1.1.0",
   "description": "Durable, private, time-aware memory engine for long-running AI agents",
   "main": "./index.js",
   "exports": {
@@ -9,16 +9,22 @@
     "./remote": "./remote.js"
   },
   "bin": {
-    "dbx": "./bin/cli.js"
+    "dbx": "bin/cli.js"
   },
   "scripts": {
-    "start": "node server.js",
-    "test": "node test-basic.js && node test-versioning.js",
-    "bench": "node bench/agent-memory/run-all.js"
+    "start": "node server.js"
   },
   "keywords": "ai-agent-memory,temporal-memory,local-first,versioned-recall",
-  "author": "",
+  "author": "KrishnaLabsLLC <main@krishnalabs.ai>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabsKrishna/dbx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LabsKrishna/dbx/issues"
+  },
+  "homepage": "https://github.com/LabsKrishna/dbx#readme",
   "type": "commonjs",
   "engines": {
     "node": ">=18.0.0"
@@ -38,6 +44,7 @@
     "bin/cli.js",
     "errors.js",
     "agent.js",
-    "dashboard.html"
+    "auth.js",
+    "examples/demo.js"
   ]
 }

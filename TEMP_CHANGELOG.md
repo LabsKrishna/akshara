@@ -195,3 +195,91 @@ Is it truly helping with the constitution goals (time-aware recall, provenance, 
 ### Files touched
 - `errors.js` (new), `index.js`, `server.js`, `package.json`
 - `bench/agent-memory/` (6 new files)
+
+## 2026-04-12 — Launch kit: README rewrite + interactive demo + HN post
+
+### Added
+
+- **`examples/demo.js`** — Zero-config interactive demo that runs a full agent memory scenario (versioning, time-travel, contradiction detection, provenance) using a built-in bag-of-words embedder. No API key needed. In-memory mode, nothing written to disk.
+- **`LAUNCH_HN.md`** — Hacker News Show HN launch post draft with title options, engagement strategy, timing notes, and a detailed technical first-comment template.
+- **`demo` CLI command** — `npx dbx-memory demo` (or `dbx demo`) runs the interactive demo. Added to `bin/cli.js` and help output.
+
+### Updated
+
+- **`README.md`** — Complete rewrite as a conversion-optimized landing page:
+  - Leads with pain point ("Vector databases store embeddings. Database X remembers.")
+  - 30-second `npx dbx-memory demo` call-to-action above the fold
+  - Quick start shows the full agent workflow: store → update → time-travel → history → contradictions
+  - Side-by-side comparison table (Vector DB vs Database X)
+  - Progressive disclosure: agent API → core capabilities → full API reference → HTTP endpoints
+  - Removed redundant preamble, tightened all copy for scannability
+- **`bin/cli.js`** — Added `demo` command routing and help text.
+- **`package.json`** — Added `examples/demo.js` to `files` array for npm publish.
+
+### Files touched
+
+- `README.md`, `examples/demo.js` (new), `LAUNCH_HN.md` (new), `bin/cli.js`, `package.json`
+
+## 2026-04-12 — Auth + Workspace ACL Enforcement
+
+### Added
+
+- **`auth.js`** — New module implementing token-based authentication and workspace-level access control:
+  - `AuthStore` class with principal management, Bearer token authentication, role-per-workspace ACL, grant/revoke, and audit log
+  - Role hierarchy: `read` < `write` < `admin` < `owner`
+  - Permission mapping: read ops → `read`, write/ingest ops → `write`, delete/purge → `admin`, grant/revoke → `owner`
+  - Serialization support (`toJSON`/`load`) for persistence
+  - Ring-buffered audit log (max 1000 entries) with workspace/principal/action filtering
+- **`ERR_AUTH_FAILED`** and **`ERR_FORBIDDEN`** error codes in `errors.js` with convenience constructors `Err.authFailed()` and `Err.forbidden(detail)`
+- **Auth middleware in `server.js`** — `_requireAuth(permission)` extracts Bearer token, resolves principal, computes allowed workspaces for the required permission level, and rejects with 401/403 before the route handler runs
+- **Auth management HTTP endpoints**:
+  - `POST /auth/enable` — enable token-based auth
+  - `POST /auth/disable` — disable auth (open access, default)
+  - `GET /auth/status` — `{ enabled, principals }`
+  - `POST /auth/principals` — create principal with workspace roles, returns token
+  - `DELETE /auth/principals/:id` — remove principal
+  - `GET /auth/principals` — list all principals
+  - `POST /auth/grant` — grant role on workspace
+  - `POST /auth/revoke` — revoke workspace access
+  - `GET /auth/audit` — query audit log with filters
+- **`allowedWorkspaces` parameter** on every engine function: `ingest`, `remember`, `ingestBatch`, `extractFacts`, `query`, `get`, `getMany`, `remove`, `purge`, `consolidate`, `listEntities`, `getHistory`, `getGraph`, `traverse`, `getStatus`, `exportMarkdown`, `importMarkdown`
+- **`_wsAllowed()` helper** in `index.js` — checks entity workspace membership against allowed set
+- **`lib.auth`** exported from `index.js` — exposes the `AuthStore` instance for programmatic use
+
+### Updated
+
+- `errors.js`: Added `AUTH_FAILED` and `FORBIDDEN` codes + convenience constructors
+- `index.js`: Every public read/write/delete function accepts `allowedWorkspaces` and enforces workspace isolation. `ingest()` checks write access to target workspace. `get()`, `getHistory()`, `traverse()` throw `ERR_FORBIDDEN` for inaccessible entities. `getMany()` returns null for inaccessible entities. `query()`, `listEntities()`, `getGraph()`, `getStatus()`, `exportMarkdown()`, `consolidate()` filter to allowed workspaces.
+- `server.js`: Every route wrapped with `_requireAuth(permission)`. CORS allows `Authorization` header. HTTP status mapping includes 401 for `ERR_AUTH_FAILED`, 403 for `ERR_FORBIDDEN`. Agent create stores `allowedWorkspaces` context. Audit entries emitted for ingest, remember, batch, remove, purge, agent_create.
+- `remote.js`: `connect()` accepts optional `{ token }` for Bearer auth. All HTTP methods include `Authorization` header when token is set. Added `auth` namespace with `enable`, `disable`, `status`, `addPrincipal`, `removePrincipal`, `listPrincipals`, `grant`, `revoke`, `getAuditLog`.
+- `agent.js`: `remember()`, `recall()`, `learnFrom()` pass through `allowedWorkspaces` from opts.
+- `package.json`: Added `auth.js` to `files` array.
+
+### Design notes
+
+- **Off by default** — auth is disabled until `POST /auth/enable` or `auth.enable()`. When disabled, all routes pass through unrestricted, preserving backward compatibility.
+- **Workspace isolation is real** — `workspaceId` on entities is no longer just a label. With auth enabled, a principal can only see/write/delete entities in workspaces they have roles for. Cross-workspace leakage is impossible.
+- **Permission levels match operations** — reads need `read`, writes need `write`, deletes need `admin`, grants need `owner`. The middleware computes the intersection of principal permissions and requested operations.
+- **Additive only** — no breaking changes to existing APIs. The `allowedWorkspaces` parameter is optional and defaults to null (unrestricted).
+
+### Files touched
+
+- `auth.js` (new), `errors.js`, `index.js`, `server.js`, `remote.js`, `agent.js`, `package.json`
+
+## 2026-04-12 — README rewrite: canonical thesis + agent-first positioning
+
+### Updated
+
+- **`README.md`** — Full rewrite to align with CLAUDE.md product direction:
+  - Opening line now uses the §9 canonical product thesis instead of generic "lightweight semantic memory engine"
+  - Added KrishnaLabs branding
+  - Fixed quickstart: now shows `embedFn` in `init()` (previous example would throw because `strictEmbeddings` defaults to `"1"`)
+  - Added dedicated **Agent Memory** section documenting `createAgent()`, `agent.recall()` with `asOf` time-travel, `agent.getContradictions()`, and provenance tracking
+  - Added documentation for: `asOf` time-travel queries, provenance/classification, retention/soft-delete/purge, `memoryType`/`workspaceId`, hybrid scoring breakdown, error→signal loop, LLM enrichment
+  - Added agent HTTP endpoints table (`/agent/create`, `/agent/:agentId/remember`, etc.)
+  - Added configuration table with all env vars including `DBX_LLM_BOOST`, `DBX_RECENCY_WEIGHT`, `DBX_RECENCY_HALFLIFE_DAYS`
+  - Removed "Project Direction" section (that belongs in CLAUDE.md, not README)
+
+### Files touched
+
+- `README.md`

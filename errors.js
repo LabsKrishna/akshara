@@ -49,6 +49,8 @@ const Codes = {
   VALIDATION:         "ERR_VALIDATION",
   WORKER_FAILED:      "ERR_WORKER_FAILED",
   LLM_ENRICHMENT:     "ERR_LLM_ENRICHMENT",
+  AUTH_FAILED:        "ERR_AUTH_FAILED",
+  FORBIDDEN:          "ERR_FORBIDDEN",
 };
 
 // ─── Signal Bus ──────────────────────────────────────────────────────────────
@@ -175,6 +177,18 @@ const Err = {
     new DatabaseXError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
       recoverable: true,
       suggestion: "Query will retry on the main thread if workers fail.",
+    }),
+
+  authFailed: () =>
+    new DatabaseXError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
+      recoverable: false,
+      suggestion: "Include an Authorization: Bearer <token> header.",
+    }),
+
+  forbidden: (detail) =>
+    new DatabaseXError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
+      recoverable: false,
+      suggestion: "Check your workspace role. Required permission may be read, write, admin, or owner.",
     }),
 };
 

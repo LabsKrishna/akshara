@@ -10,6 +10,9 @@ const PORT = Number(process.env.DBX_PORT) || 3000;
 if (cmd === "start") {
   require("../server");
 
+} else if (cmd === "demo") {
+  require("../examples/demo");
+
 } else if (cmd === "status") {
   fetch(`http://localhost:${PORT}/status`)
     .then(r => r.json())
@@ -42,6 +45,7 @@ if (cmd === "start") {
   console.log("");
   console.log("Usage:");
   console.log("  dbx start            Start the server (default port 3000)");
+  console.log("  dbx demo             Run interactive demo (no API key needed)");
   console.log("  dbx status           Print server status as JSON");
   console.log('  dbx query <text>     Run a semantic query against the server');
   console.log("");

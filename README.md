@@ -1,281 +1,337 @@
 # Database X
 
-Database X is a lightweight, local-first semantic memory engine for Node.js.
+**Vector databases store embeddings. Database X remembers.**
 
-It combines:
-
-- Vector similarity for semantic search
-- Graph links for related-memory traversal
-- Version history for evolving records
-- Multi-type ingestion for text, files, and time series
-
-## Why Use It
-
-Database X is built for developers and AI agents that need memory without adding a heavy external database.
-
-- Local-first: runs on your machine and keeps data private
-- Simple API: small surface area, easy to wire into apps and tools
-- Version-aware: updates become history instead of overwrites
-- Hybrid retrieval: semantic search plus keyword and graph signals
-- Multi-model ready: supports text, JSON, images, audio, video, and time series
-
-## Highlights
-
-### What makes it useful
-
-- Explicit `init()` and `shutdown()` lifecycle
-- Automatic update detection during ingest
-- Per-entity version history with delta summaries
-- Worker-thread query execution for faster searches
-- Atomic persistence to a local `data.dbx` file
-- Optional HTTP server for app and dashboard access
-
-### Best fit
-
-Use Database X when you want:
-
-- Local semantic memory for an agent
-- Versioned knowledge storage for a tool or app
-- Lightweight retrieval without setting up a larger database stack
-
-## Installation
+Your agent stores a fact. Updates it. Then asks "what was true last week?" Your vector database returns nothing — the old embedding is gone. Database X returns the right answer, with a full version trail showing when and why it changed.
 
 ```bash
-npm install database-x
+npm install dbx-memory
 ```
 
-Node.js `18+` is required.
+---
 
-## Quick Start
+## See it work — 30 seconds, no API key
+
+```bash
+npx dbx-memory demo
+```
+
+Runs a live agent memory demo in your terminal. Zero config. Nothing written to disk.
+
+---
+
+## Quick start
 
 ```js
-const dbx = require('database-x');
+const dbx = require('dbx-memory');
 
 async function main() {
-	await dbx.init();
+  await dbx.init({
+    // Bring your own embedder — any function that returns a number[]
+    embedFn: async (text) => {
+      const res = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: 'text-embedding-3-small', input: text }),
+      });
+      return (await res.json()).data[0].embedding;
+    },
+  });
 
-	const id = await dbx.remember('Raw material costs $200 per unit');
+  const agent = dbx.createAgent({ name: 'analyst' });
 
-	await dbx.remember('Raw material costs $250 per unit');
+  // Store a fact
+  const id = await agent.remember('Revenue target is $10M for Q3');
 
-	const results = await dbx.query('What is the current raw material cost?');
-	console.log(results);
+  // Update it — version detection is automatic, no ID needed
+  await agent.remember('Revenue target revised to $12M for Q3');
 
-	const history = await dbx.getHistory(id);
-	console.log(history);
+  // What's current?
+  const now = await agent.recall('revenue target');
+  // → "Revenue target revised to $12M for Q3"
 
-	await dbx.shutdown();
+  // What was true BEFORE the revision?
+  const then = await agent.recall('revenue target', {
+    asOf: Date.now() - 7 * 24 * 60 * 60 * 1000, // one week ago
+  });
+  // → "Revenue target is $10M for Q3"
+
+  // What changed?
+  const history = await agent.getHistory(id);
+  // → v1: "$10M" → v2: "$12M", delta: "Value changed: [$10m] → [$12m]"
+
+  // Spot contradictions
+  const { contradictions } = await agent.getContradictions(id);
+
+  await dbx.shutdown();
 }
 
-main().catch(console.error);
+main();
 ```
 
-## Core Concepts
+---
 
-### Entity
+## Why not just use a vector database?
 
-An entity is a living record. Instead of overwriting old content, Database X can recognize updates and attach them as newer versions of the same entity.
+|  | Vector DB | Database X |
+|---|---|---|
+| **Updates** | Overwrite or duplicate | Automatic versioning |
+| **History** | None | Full version trail with deltas |
+| **"What was true on Jan 15?"** | Can't answer | `asOf` any timestamp |
+| **Contradictions** | Invisible | Auto-detected between versions |
+| **Provenance** | Not tracked | Who stored it, when, from where |
+| **Retrieval** | Cosine similarity | Semantic + graph + keyword + recency |
+| **Deployment** | Cloud SDK | Local-first, zero cloud dependency |
+| **Embedding model** | Bundled or locked in | BYO — any provider, any model |
 
-### Versioning
+---
 
-Every meaningful update is stored with:
+## Agent API
 
-- The new text
-- A timestamp
-- A delta summary describing the change
+`createAgent()` is the recommended interface. It wraps the core engine with agent identity, default classification, default tags, and a clean `remember / recall / update` surface.
 
-### Hybrid Query
+```js
+const agent = dbx.createAgent({
+  name: 'budget-planner',
+  defaultClassification: 'confidential',
+  defaultTags: ['finance'],
+});
 
-Queries combine:
+await agent.remember('Q2 budget is 2.4M');
+await agent.update('Q2 budget is now 2.7M');
 
-- Semantic similarity
-- Graph relationships
-- Keyword relevance
+const results = await agent.recall('Q2 budget');
+const past    = await agent.recall('Q2 budget', {
+  asOf: Date.now() - 7 * 24 * 60 * 60 * 1000,
+});
 
-### Type-Aware Ingestion
+const history         = await agent.getHistory(id);
+const { contradictions } = await agent.getContradictions(id);
+```
 
-Different data types can be embedded through type-specific embedders:
+| Method | What it does |
+|--------|-------------|
+| `agent.remember(text, opts?)` | Store or update a fact (version detection is automatic) |
+| `agent.update(text, opts?)` | Alias for `remember` — makes update intent explicit |
+| `agent.recall(text, opts?)` | Query memories (supports `asOf` for time-travel) |
+| `agent.getHistory(id)` | Full version history with provenance trail |
+| `agent.getContradictions(id)` | Versions flagged as contradictory |
 
-- `text`
-- `document`
-- `json`
-- `image`
-- `audio`
-- `video`
-- `timeseries`
+---
 
-## API Overview
+## Core capabilities
+
+### Versioned memory
+
+Every update creates a version, never an overwrite. Each version records the new content, a delta summary describing the change, a timestamp, source provenance, classification, and a snapshot of graph edges at that point in time.
+
+### Time-travel queries
+
+Pass `asOf` (Unix ms) to any query. Entities that didn't exist yet are skipped. Each entity is scored against the version that was current at that time.
+
+```js
+const results = await dbx.query('raw material cost', {
+  asOf: new Date('2026-01-15').getTime(),
+});
+```
+
+### Contradiction detection
+
+When a version contradicts a previous one (e.g. a price changes from $200 to $250), the delta is flagged. Agents can inspect contradictions and decide how to act.
+
+### Provenance and classification
+
+Every entity tracks `source` (who created it) and `classification` (how sensitive it is). Query results include both so downstream systems can make trust decisions.
+
+```js
+await dbx.ingest('Customer requested a refund', {
+  source: { type: 'tool', uri: 'support-ticket-1234' },
+  classification: 'confidential',
+  tags: ['support', 'billing'],
+});
+```
+
+### Retention and deletion
+
+- **Soft delete**: `remove(id, { deletedBy })` — excluded from queries, preserved for audit
+- **Hard delete**: `purge(id)` — permanent erasure for right-to-erasure workflows (GDPR)
+- **Retention policy**: `{ policy: "keep" | "expire", expiresAt }` per entity
+
+### Memory types and workspaces
+
+Tag entities with `memoryType` (`"short-term"`, `"long-term"`, `"working"`) and `workspaceId` for tenant isolation. Both are filterable in queries.
+
+```js
+await dbx.remember('Meeting notes from standup', {
+  memoryType: 'short-term',
+  workspaceId: 'team-alpha',
+});
+```
+
+### Hybrid scoring
+
+Queries combine multiple signals into a final score:
+
+- **Semantic similarity** — cosine distance between embeddings
+- **Graph boost** — related entities via automatically discovered links
+- **Keyword boost** — exact term overlap
+- **LLM keyword boost** — when `useLLM` enrichment is enabled
+- **Recency boost** — configurable half-life, disabled in `asOf` mode
+
+### Error signals
+
+Structured errors that agents can subscribe to for adaptive behavior:
+
+```js
+dbx.onSignal('ERR_EMBEDDING_FAILED', (err) => {
+  console.warn(err.message, '—', err.suggestion);
+});
+```
+
+### LLM enrichment
+
+Pass `llmFn` to `init()` for optional metadata extraction on ingest. When `useLLM: true` is set, the LLM extracts keywords, context, semantic tags, and importance scores. Off by default. Failures are non-blocking.
+
+```js
+await dbx.init({
+  embedFn: myEmbedder,
+  llmFn: async (text, type) => ({
+    keywords: ['budget', 'Q2'],
+    context: 'Quarterly budget update',
+    llmTags: ['finance', 'planning'],
+    importance: 0.8,
+  }),
+});
+
+await dbx.remember('Q2 budget is 2.4M', { useLLM: true });
+```
+
+---
+
+## API reference
 
 ### Lifecycle
 
 ```js
-await dbx.init(options?)
+await dbx.init({ embedFn, llmFn?, embeddingDim?, dataFile?, ...overrides })
 await dbx.shutdown()
 ```
 
-### Ingestion
+### Write
 
 ```js
-await dbx.remember(text, options?)
-await dbx.ingest(text, options?)
+await dbx.remember(text, opts?)
+await dbx.ingest(text, opts?)
 await dbx.ingestBatch(items)
-await dbx.ingestFile(filePath, options?)
-await dbx.ingestTimeSeries(label, points, options?)
+await dbx.ingestFile(filePath, opts?)
+await dbx.ingestTimeSeries(label, points, opts?)
 ```
 
-### Retrieval
+Options: `{ type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM }`
+
+### Read
 
 ```js
-await dbx.query(text, options?)
+await dbx.query(text, { limit?, filter?, asOf? })
 await dbx.get(id)
 await dbx.getMany(ids)
 await dbx.getHistory(id)
-await dbx.listEntities(options?)
+await dbx.listEntities({ page?, limit?, type?, since?, until?, tags?, memoryType?, workspaceId? })
 await dbx.getGraph()
 await dbx.traverse(id, depth?)
 await dbx.getStatus()
-await dbx.remove(id)
 ```
 
-## Common Examples
-
-### Recommended agent API
-
-Use `remember()` for agent writes. It is a thin helper over `ingest()` that defaults:
-
-- `source` to `{ type: "agent" }`
-- `classification` to `"internal"`
+### Delete
 
 ```js
-await dbx.remember('User prefers weekly planning summaries', {
-	tags: ['preference', 'planning'],
-});
+await dbx.remove(id, { deletedBy? })    // soft delete
+await dbx.purge(id)                      // permanent hard delete
 ```
 
-### Ingest text
+### Agent
 
 ```js
-await dbx.ingest('Customer requested a refund', {
-	type: 'text',
-	classification: 'internal',
-	source: { type: 'tool', uri: 'support-ticket' },
-	tags: ['support', 'billing'],
-});
+const agent = dbx.createAgent({ name, defaultClassification?, defaultTags?, useLLM? })
 ```
 
-### Ingest multiple items
+### Signals
 
 ```js
-await dbx.ingestBatch([
-	{ text: 'Server CPU hit 80%', type: 'text', tags: ['ops'] },
-	{ text: 'Disk usage reached 90%', type: 'text', tags: ['ops'] },
-]);
+dbx.onSignal(code, callback)
+dbx.getSignals(code?)
 ```
 
-### Ingest a file
+---
 
-```js
-await dbx.ingestFile('./notes/roadmap.md', {
-	tags: ['planning'],
-});
-```
-
-### Ingest time series data
-
-```js
-await dbx.ingestTimeSeries('weekly_signups', [
-	{ timestamp: Date.now() - 2000, value: 120 },
-	{ timestamp: Date.now() - 1000, value: 132 },
-	{ timestamp: Date.now(), value: 145 },
-]);
-```
-
-### Query with filters
-
-```js
-const result = await dbx.query('recent ops alerts', {
-	limit: 5,
-	filter: { type: 'text', tags: ['ops'] },
-});
-```
-
-## HTTP Server
-
-Database X can also run as a local HTTP service.
-
-### Start the server
+## HTTP server
 
 ```bash
-npx dbx
+npx dbx-memory          # starts on localhost:3000
 ```
 
-Or from source:
+### Core endpoints
 
-```bash
-node server.js
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/ingest` | Ingest with full options |
+| `POST` | `/remember` | Agent-facing write |
+| `POST` | `/ingest/batch` | Batch ingest |
+| `POST` | `/ingest/timeseries` | Time series data |
+| `POST` | `/ingest/file` | File ingest |
+| `POST` | `/query` | Query with `{ text, limit?, filter?, asOf? }` |
+| `GET` | `/entity/:id` | Get entity |
+| `DELETE` | `/entity/:id` | Soft delete |
+| `DELETE` | `/entity/:id/purge` | Permanent hard delete |
+| `POST` | `/entities/batch` | Get multiple by ID |
+| `GET` | `/entities` | List with filters |
+| `GET` | `/history/:id` | Version history |
+| `GET` | `/graph` | Full graph |
+| `GET` | `/traverse/:id` | Traverse from entity |
+| `GET` | `/status` | System status |
 
-### Server exports
+### Agent endpoints
 
-```js
-const server = require('database-x/server');
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/agent/create` | Create agent `{ name, defaultClassification?, defaultTags?, useLLM? }` |
+| `POST` | `/agent/:agentId/remember` | Store via agent |
+| `POST` | `/agent/:agentId/update` | Update via agent |
+| `POST` | `/agent/:agentId/recall` | Query via agent (supports `asOf`) |
+| `GET` | `/agent/:agentId/history/:entityId` | Version history |
+| `GET` | `/agent/:agentId/contradictions/:entityId` | Contradiction inspection |
 
-### Main endpoints
-
-- `POST /ingest`
-- `POST /remember`
-- `POST /ingest/batch`
-- `POST /ingest/timeseries`
-- `POST /ingest/file`
-- `POST /query`
-- `POST /entities/batch`
-- `GET /entity/:id`
-- `DELETE /entity/:id`
-- `GET /history/:id`
-- `GET /entities`
-- `GET /graph`
-- `GET /traverse/:id`
-- `GET /status`
-
-By default the server runs on `http://localhost:3000`.
-
-### Agent-facing HTTP write API
-
-`POST /remember` is the recommended endpoint for agents and agent frameworks. It accepts the same body shape as `POST /ingest`, but defaults `source` to `{ type: "agent" }` and `classification` to `"internal"` when omitted.
+---
 
 ## Configuration
 
-Database X supports environment-variable configuration for common settings:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DBX_LINK_THRESHOLD` | `0.72` | Similarity threshold for graph linking |
+| `DBX_VERSION_THRESHOLD` | `0.82` | Similarity threshold for version detection |
+| `DBX_GRAPH_BOOST` | `0.01` | Graph relationship boost weight |
+| `DBX_LLM_BOOST` | `0.08` | LLM keyword boost weight |
+| `DBX_RECENCY_WEIGHT` | `0.10` | Recency boost weight |
+| `DBX_RECENCY_HALFLIFE_DAYS` | `30` | Recency half-life in days |
+| `DBX_MIN_SCORE` | `0.45` | Minimum final score for results |
+| `DBX_MIN_SEMANTIC` | `0.35` | Minimum semantic similarity |
+| `DBX_MAX_VERSIONS` | `0` | Max versions per entity (0 = unlimited) |
+| `DBX_STRICT_EMBEDDINGS` | `1` | Require embedder (`0` to disable) |
+| `DBX_PORT` | `3000` | HTTP server port |
 
-- `DBX_LINK_THRESHOLD`
-- `DBX_VERSION_THRESHOLD`
-- `DBX_GRAPH_BOOST`
-- `DBX_MIN_SCORE`
-- `DBX_MIN_SEMANTIC`
-- `DBX_MAX_VERSIONS`
-- `DBX_STRICT_EMBEDDINGS`
-- `DBX_PORT`
+---
 
-## Storage Behavior
+## Storage
 
-- Data is persisted locally to `data.dbx`
-- Writes are atomic to reduce corruption risk
-- Batch ingest writes once at the end for better performance
+- Persisted locally to `data.dbx` (configurable via `dataFile`)
+- Atomic writes to reduce corruption risk
+- Pass `dataFile: ":memory:"` for in-memory-only mode
 
-## Notes on Embeddings
+---
 
-Database X is model-agnostic. Supply an embedder with `init({ embedFn })`, and optionally pass `embeddingDim` if you want to enforce a fixed output size.
+## License
 
-## Project Direction
-
-The project focuses on:
-
-- Clear APIs
-- Local development workflows
-- Practical semantic memory for real apps
-- Readable code over unnecessary complexity
-
-## Contributing
-
-Contributions are welcome. If you are contributing to the project, follow the repository conventions and check `CLAUDE.md` if it is part of your workflow.
+MIT — [KrishnaLabs](https://krishnalabs.ai)

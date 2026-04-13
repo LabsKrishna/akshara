@@ -9,6 +9,7 @@ const { buildDelta }               = require("./versioning");
 const { WorkerPool } = require("./worker-pool");
 const { AgentMemory } = require("./agent");
 const { Err, emitError, resetSignals } = require("./errors");
+const { AuthStore } = require("./auth");
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ const DEFAULTS = {
   dataFile:           path.join(process.cwd(), "data.dbx"),
   // embedFn(text, type) — inject your own: `async (text, type) => number[]`.
   // llmFn(text, type) — inject your own: `async (text, type) => { keywords, context, llmTags, importance?, suggestedType? }`.
+  // factExtractFn(text, type) — inject your own: `async (text, type) => string[]` (array of discrete fact strings).
+  consolidationThreshold: Number(process.env.DBX_CONSOLIDATION_THRESHOLD || 0.78),
 };
 
 // ─── Module state ─────────────────────────────────────────────────────────────
@@ -36,6 +39,7 @@ let store       = new Map();   // id → entity
 let _pool       = null;        // persistent WorkerPool
 let _initialized = false;
 let _skipIO      = false;      // suppresses per-item I/O during batch operations
+const _auth      = new AuthStore();
 
 // Monotonically increasing ID — guarantees uniqueness even within the same ms.
 let _nextId = Date.now();
@@ -127,6 +131,13 @@ function _unlinkEntity(entity, entityId) {
 
 function _assertInit() {
   if (!_initialized) throw emitError(Err.notInitialized());
+}
+
+// Returns true if the entity's workspace is in the allowed set.
+// When allowedWorkspaces is null/undefined, no restriction is applied.
+function _wsAllowed(entity, allowedWorkspaces) {
+  if (!allowedWorkspaces) return true;
+  return allowedWorkspaces.includes(entity.workspaceId || "default");
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -320,6 +331,23 @@ async function _enrichWithLLM(text, type) {
   }
 }
 
+// ─── Fact Extraction ─────────────────────────────────────────────────────────
+
+// Calls the caller-supplied factExtractFn to break raw text into discrete facts.
+// Returns an array of fact strings, or empty array on failure.
+// Expected signature: async (text, type) => string[]
+async function _extractFacts(text, type) {
+  if (typeof CFG.factExtractFn !== "function") return [];
+  try {
+    const raw = await CFG.factExtractFn(text, type);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(String).filter(s => s.trim().length > 0).slice(0, 50);
+  } catch (err) {
+    console.warn(`[dbx] Fact extraction failed (non-blocking): ${err.message}`);
+    return [];
+  }
+}
+
 // ─── Graph Linking ────────────────────────────────────────────────────────────
 
 function _relinkEntity(entity) {
@@ -353,7 +381,7 @@ function _relinkEntity(entity) {
  * @param {{ type?, timestamp?, metadata?, tags?, source?, classification? }} opts
  * @returns {number} stable entity ID (never changes across updates)
  */
-async function ingest(text, { type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM = false } = {}) {
+async function ingest(text, { type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM = false, allowedWorkspaces } = {}) {
   _assertInit();
 
   const ts       = timestamp || Date.now();
@@ -364,6 +392,11 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
   const ret      = _normalizeRetention(retention);
   const mt       = _normalizeMemoryType(memoryType);
   const ws       = _normalizeWorkspaceId(workspaceId);
+
+  // Workspace write check: caller must be allowed to write to the target workspace
+  if (allowedWorkspaces && !allowedWorkspaces.includes(ws)) {
+    throw emitError(Err.forbidden(`No write access to workspace "${ws}".`));
+  }
 
   // ── Optional LLM enrichment (off by default for speed/privacy) ────────────
   let llmEnrichment = null;
@@ -376,7 +409,11 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
   }
 
   // ── Find closest existing entity of the same type ─────────────────────────
+  // Two tiers: versionThreshold for direct updates, consolidationThreshold for
+  // near-duplicate detection so the same fact expressed differently merges
+  // instead of creating a separate entity.
   let bestMatch = null, bestSim = 0;
+  let consolidateMatch = null, consolidateSim = 0;
   for (const entity of store.values()) {
     if (!_isAlive(entity)) continue;
     if (entity.type !== type) continue;
@@ -384,39 +421,49 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
     if (sim >= CFG.versionThreshold && sim > bestSim) {
       bestSim   = sim;
       bestMatch = entity;
+    } else if (sim >= CFG.consolidationThreshold && sim > consolidateSim) {
+      consolidateSim   = sim;
+      consolidateMatch = entity;
     }
   }
 
-  // ── Update path: same entity, new version ─────────────────────────────────
-  if (bestMatch) {
-    const delta = buildDelta(bestMatch.text, bestMatch.vector, safeText, vector);
+  // Consolidation: if no direct version match but a near-duplicate exists,
+  // treat it as a version update (same fact, different expression).
+  const mergeTarget = bestMatch || consolidateMatch;
+  const isConsolidation = !bestMatch && !!consolidateMatch;
+
+  // ── Update / Consolidation path: merge into existing entity ───────────────
+  if (mergeTarget) {
+    const delta = buildDelta(mergeTarget.text, mergeTarget.vector, safeText, vector);
+    if (isConsolidation) delta.type = "consolidation";
 
     // Snapshot current linkIds before relink so the version captures the graph at this point
-    const linkSnapshot = Array.from(bestMatch.links);
-    bestMatch.versions.unshift({ text: safeText, vector, timestamp: ts, delta, source: src, classification: cls, linkIds: linkSnapshot });
+    const linkSnapshot = Array.from(mergeTarget.links);
+    mergeTarget.versions.unshift({ text: safeText, vector, timestamp: ts, delta, source: src, classification: cls, linkIds: linkSnapshot });
 
-    if (CFG.maxVersions > 0 && bestMatch.versions.length > CFG.maxVersions) {
-      bestMatch.versions.length = CFG.maxVersions;
+    if (CFG.maxVersions > 0 && mergeTarget.versions.length > CFG.maxVersions) {
+      mergeTarget.versions.length = CFG.maxVersions;
     }
 
-    bestMatch.text      = safeText;
-    bestMatch.vector    = vector;
-    bestMatch.updatedAt = ts;
-    bestMatch.source    = src;
-    bestMatch.classification = cls;
-    bestMatch.retention = retention ? ret : bestMatch.retention || _normalizeRetention();
-    bestMatch.memoryType  = memoryType ? mt : bestMatch.memoryType || _normalizeMemoryType();
-    bestMatch.workspaceId = workspaceId ? ws : bestMatch.workspaceId || _normalizeWorkspaceId();
-    bestMatch.metadata  = { ...bestMatch.metadata, ...metadata };
-    if (llmEnrichment) bestMatch.metadata.llm = llmEnrichment;
-    bestMatch.tags      = Array.from(new Set([...(bestMatch.tags || []), ...tags]));
-    if (llmEnrichment) bestMatch.llmKeywords = llmEnrichment.keywords;
+    mergeTarget.text      = safeText;
+    mergeTarget.vector    = vector;
+    mergeTarget.updatedAt = ts;
+    mergeTarget.source    = src;
+    mergeTarget.classification = cls;
+    mergeTarget.retention = retention ? ret : mergeTarget.retention || _normalizeRetention();
+    mergeTarget.memoryType  = memoryType ? mt : mergeTarget.memoryType || _normalizeMemoryType();
+    mergeTarget.workspaceId = workspaceId ? ws : mergeTarget.workspaceId || _normalizeWorkspaceId();
+    mergeTarget.metadata  = { ...mergeTarget.metadata, ...metadata };
+    if (llmEnrichment) mergeTarget.metadata.llm = llmEnrichment;
+    mergeTarget.tags      = Array.from(new Set([...(mergeTarget.tags || []), ...tags]));
+    if (llmEnrichment) mergeTarget.llmKeywords = llmEnrichment.keywords;
 
-    _relinkEntity(bestMatch);
+    _relinkEntity(mergeTarget);
     _persistAll();
     const flag = delta.contradicts ? " ⚠ CONTRADICTS prior version" : "";
-    console.log(`[dbx] Updated entity ${bestMatch.id} → v${bestMatch.versions.length} [${delta.type}]${flag} ${delta.summary}`);
-    return bestMatch.id;
+    const verb = isConsolidation ? "Consolidated into" : "Updated";
+    console.log(`[dbx] ${verb} entity ${mergeTarget.id} → v${mergeTarget.versions.length} [${delta.type}]${flag} ${delta.summary}`);
+    return mergeTarget.id;
   }
 
   // ── Create path: brand new entity ─────────────────────────────────────────
@@ -463,6 +510,7 @@ async function remember(text, opts = {}) {
     ...opts,
     source,
     classification: opts.classification || "internal",
+    allowedWorkspaces: opts.allowedWorkspaces,
   });
 }
 
@@ -473,7 +521,7 @@ async function remember(text, opts = {}) {
  * @param {Array<{ text: string, type?, metadata?, tags?, timestamp?, source?, classification? }>} items
  * @returns {number[]} array of entity IDs in the same order as input
  */
-async function ingestBatch(items) {
+async function ingestBatch(items, { allowedWorkspaces } = {}) {
   _assertInit();
   if (!Array.isArray(items) || items.length === 0) {
     throw emitError(Err.validation("items must be a non-empty array"));
@@ -484,13 +532,53 @@ async function ingestBatch(items) {
   try {
     for (const item of items) {
       const { text, type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM } = item || {};
-      ids.push(await ingest(text, { type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM }));
+      ids.push(await ingest(text, { type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM, allowedWorkspaces }));
     }
   } finally {
     _skipIO = false;
   }
   _persistAll(); // single write for the entire batch
   return ids;
+}
+
+// ─── Fact Extraction + Ingest ────────────────────────────────────────────────
+
+/**
+ * Extract discrete facts from raw text and ingest each as a separate entity.
+ * Requires factExtractFn to be configured via init().
+ *
+ * @param {string} text — raw text (meeting notes, paragraphs, etc.)
+ * @param {{ type?, timestamp?, metadata?, tags?, source?, classification?, retention?, memoryType?, workspaceId?, useLLM? }} opts
+ * @returns {{ facts: string[], ids: number[] }}
+ */
+async function extractFacts(text, opts = {}) {
+  _assertInit();
+  if (typeof CFG.factExtractFn !== "function") {
+    throw emitError(Err.validation("factExtractFn not configured. Pass factExtractFn to init({ factExtractFn: async (text, type) => string[] })."));
+  }
+
+  const safeText = String(text || "").slice(0, 10000);
+  const facts = await _extractFacts(safeText, opts.type || "text");
+  if (!facts.length) return { facts: [], ids: [] };
+
+  // Ingest each fact as its own entity, batched for single persist
+  _skipIO = true;
+  const ids = [];
+  try {
+    for (const fact of facts) {
+      ids.push(await ingest(fact, {
+        ...opts,
+        metadata: { ...(opts.metadata || {}), extractedFrom: safeText.slice(0, 200) },
+        allowedWorkspaces: opts.allowedWorkspaces,
+      }));
+    }
+  } finally {
+    _skipIO = false;
+  }
+  _persistAll();
+
+  console.log(`[dbx] Extracted ${facts.length} facts from raw text`);
+  return { facts, ids };
 }
 
 // ─── Time Series Ingest ───────────────────────────────────────────────────────
@@ -690,7 +778,7 @@ async function _runWorkers(queryVector, queryTerms, subset, { now = Date.now(), 
  * @param {{ limit?, filter?: { type?, since?, until?, tags?, memoryType?, workspaceId? }, asOf?: number }} opts
  * @returns {{ count, results, filter, asOf, config }}
  */
-async function query(text, { limit = 10, filter = {}, asOf = null } = {}) {
+async function query(text, { limit = 10, filter = {}, asOf = null, allowedWorkspaces } = {}) {
   _assertInit();
 
   const safeLimit   = Math.max(1, Math.min(100, Number(limit) || 10));
@@ -699,6 +787,11 @@ async function query(text, { limit = 10, filter = {}, asOf = null } = {}) {
   const queryTerms  = String(text).toLowerCase().match(/[a-z]{3,}/g) || [];
 
   let subset = _getAllAlive();
+
+  // Workspace isolation: only return entities from allowed workspaces
+  if (allowedWorkspaces) {
+    subset = subset.filter(e => _wsAllowed(e, allowedWorkspaces));
+  }
 
   // Time-travel mode: remap each entity to the version that was current at asOf.
   // Versions are stored newest-first, so the first one with timestamp <= asOf wins.
@@ -772,10 +865,11 @@ async function query(text, { limit = 10, filter = {}, asOf = null } = {}) {
  * Get the current state of a single entity without version history.
  * @param {number|string} id
  */
-async function get(id) {
+async function get(id, { allowedWorkspaces } = {}) {
   _assertInit();
   const e = store.get(Number(id) || id);
   if (!e) throw emitError(Err.notFound(id));
+  if (!_wsAllowed(e, allowedWorkspaces)) throw emitError(Err.forbidden(`No access to workspace "${e.workspaceId || "default"}".`));
   return _serializeEntity(e);
 }
 
@@ -788,12 +882,14 @@ async function get(id) {
  * @param {Array<number|string>} ids
  * @returns {Array<object|null>}
  */
-async function getMany(ids) {
+async function getMany(ids, { allowedWorkspaces } = {}) {
   _assertInit();
   if (!Array.isArray(ids)) throw emitError(Err.validation("ids must be an array"));
   return ids.map(id => {
     const e = store.get(Number(id) || id);
-    return e ? _serializeEntity(e) : null;
+    if (!e) return null;
+    if (!_wsAllowed(e, allowedWorkspaces)) return null; // silently hide inaccessible entities
+    return _serializeEntity(e);
   });
 }
 
@@ -806,11 +902,12 @@ async function getMany(ids) {
  * @param {number|string} id
  * @param {{ deletedBy?: string|object }} opts
  */
-async function remove(id, { deletedBy } = {}) {
+async function remove(id, { deletedBy, allowedWorkspaces } = {}) {
   _assertInit();
   const numId = Number(id) || id;
   const e = store.get(numId);
   if (!e) throw emitError(Err.notFound(id));
+  if (!_wsAllowed(e, allowedWorkspaces)) throw emitError(Err.forbidden(`No admin access to workspace "${e.workspaceId || "default"}".`));
   if (e.deletedAt) throw emitError(Err.alreadyDeleted(id));
 
   _unlinkEntity(e, numId);
@@ -829,16 +926,105 @@ async function remove(id, { deletedBy } = {}) {
  * or retention policy enforcement.
  * @param {number|string} id
  */
-async function purge(id) {
+async function purge(id, { allowedWorkspaces } = {}) {
   _assertInit();
   const numId = Number(id) || id;
   const e = store.get(numId);
   if (!e) throw emitError(Err.notFound(id));
+  if (!_wsAllowed(e, allowedWorkspaces)) throw emitError(Err.forbidden(`No admin access to workspace "${e.workspaceId || "default"}".`));
 
   _unlinkEntity(e, numId);
   store.delete(numId);
   _persistAll();
   console.log(`[dbx] Purged entity ${numId} (permanent)`);
+}
+
+// ─── Memory Consolidation ────────────────────────────────────────────────────
+
+/**
+ * Scan all entities for near-duplicates and merge them.
+ * For each cluster of similar entities, the most recently updated one is kept
+ * and the others are soft-deleted after their metadata/tags are merged in.
+ *
+ * @param {{ threshold?, dryRun?, type? }} opts
+ *   threshold — similarity floor for considering two entities duplicates (default: consolidationThreshold)
+ *   dryRun    — if true, returns the report without actually merging (default: false)
+ *   type      — only consolidate entities of this type (optional)
+ * @returns {{ merged: Array<{ kept, absorbed, similarity }>, totalMerged: number }}
+ */
+async function consolidate({ threshold, dryRun = false, type, allowedWorkspaces } = {}) {
+  _assertInit();
+  const thresh = Number.isFinite(threshold) ? threshold : CFG.consolidationThreshold;
+  let alive  = _getAllAlive().filter(e => !type || e.type === type);
+  if (allowedWorkspaces) alive = alive.filter(e => _wsAllowed(e, allowedWorkspaces));
+
+  // Build clusters: union-find by similarity
+  const parent = new Map();
+  function find(id) {
+    while (parent.get(id) !== id) { parent.set(id, parent.get(parent.get(id))); id = parent.get(id); }
+    return id;
+  }
+  function union(a, b) {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+
+  for (const e of alive) parent.set(e.id, e.id);
+
+  const pairs = [];
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      if (alive[i].type !== alive[j].type) continue;
+      const sim = cosine(alive[i].vector, alive[j].vector);
+      if (sim >= thresh) {
+        union(alive[i].id, alive[j].id);
+        pairs.push({ a: alive[i], b: alive[j], sim });
+      }
+    }
+  }
+
+  // Group by cluster root
+  const clusters = new Map();
+  for (const e of alive) {
+    const root = find(e.id);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(e);
+  }
+
+  const merged = [];
+  for (const [, members] of clusters) {
+    if (members.length < 2) continue;
+    // Keep the most recently updated entity
+    members.sort((a, b) => b.updatedAt - a.updatedAt);
+    const keeper = members[0];
+    const absorbed = members.slice(1);
+
+    for (const dup of absorbed) {
+      const sim = cosine(keeper.vector, dup.vector);
+      merged.push({
+        kept:     { id: keeper.id, text: keeper.text.slice(0, 80) },
+        absorbed: { id: dup.id,    text: dup.text.slice(0, 80) },
+        similarity: +sim.toFixed(4),
+      });
+
+      if (!dryRun) {
+        // Merge tags and metadata from duplicate into keeper
+        keeper.tags = Array.from(new Set([...(keeper.tags || []), ...(dup.tags || [])]));
+        keeper.metadata = { ...dup.metadata, ...keeper.metadata };
+
+        // Soft-delete the duplicate
+        _unlinkEntity(dup, dup.id);
+        dup.deletedAt = Date.now();
+        dup.deletedBy = { type: "system", actor: "consolidate" };
+      }
+    }
+  }
+
+  if (!dryRun && merged.length) _persistAll();
+
+  const verb = dryRun ? "Would merge" : "Merged";
+  console.log(`[dbx] ${verb} ${merged.length} duplicate(s) across ${clusters.size} cluster(s)`);
+  return { merged, totalMerged: merged.length };
 }
 
 // ─── Graph ────────────────────────────────────────────────────────────────────
@@ -847,11 +1033,12 @@ async function purge(id) {
  * Get the full graph of all entities and their semantic links.
  * @returns {{ nodes, edges }}
  */
-async function getGraph() {
+async function getGraph({ allowedWorkspaces } = {}) {
   _assertInit();
   const nodes = [], edgeSet = new Set();
   for (const e of store.values()) {
     if (!_isAlive(e)) continue;
+    if (!_wsAllowed(e, allowedWorkspaces)) continue;
     nodes.push({
       id: e.id, type: e.type || "text",
       label: e.text.slice(0, 40) + (e.text.length > 40 ? "…" : ""),
@@ -881,10 +1068,11 @@ async function getGraph() {
  * @param {number} depth — max hops (default 1)
  * @returns {{ nodes, edges }}
  */
-async function traverse(id, depth = 1) {
+async function traverse(id, depth = 1, { allowedWorkspaces } = {}) {
   _assertInit();
   const root = store.get(Number(id) || id);
   if (!root) throw emitError(Err.notFound(id));
+  if (!_wsAllowed(root, allowedWorkspaces)) throw emitError(Err.forbidden(`No access to workspace "${root.workspaceId || "default"}".`));
   if (!_isAlive(root)) throw emitError(Err.alreadyDeleted(id));
 
   const visited = new Set();
@@ -895,6 +1083,7 @@ async function traverse(id, depth = 1) {
     visited.add(eid);
     const e = store.get(eid);
     if (!e || !_isAlive(e)) return;
+    if (!_wsAllowed(e, allowedWorkspaces)) return;
     result.nodes.push({
       id: e.id, type: e.type || "text",
       label: e.text.slice(0, 60) + (e.text.length > 60 ? "…" : ""),
@@ -920,7 +1109,7 @@ async function traverse(id, depth = 1) {
  * @param {{ page?, limit?, type?, since?, until?, tags? }} opts
  * @returns {{ total, page, pages, entities }}
  */
-async function listEntities({ page = 1, limit = 20, type, since, until, tags, memoryType, workspaceId } = {}) {
+async function listEntities({ page = 1, limit = 20, type, since, until, tags, memoryType, workspaceId, allowedWorkspaces } = {}) {
   _assertInit();
   const pg  = Math.max(1, Number(page)  || 1);
   const lim = Math.max(1, Math.min(100, Number(limit) || 20));
@@ -933,6 +1122,8 @@ async function listEntities({ page = 1, limit = 20, type, since, until, tags, me
   if (workspaceId) filter.workspaceId = workspaceId;
 
   let all = _getAllAlive();
+  // Workspace isolation
+  if (allowedWorkspaces) all = all.filter(e => _wsAllowed(e, allowedWorkspaces));
   if (Object.keys(filter).length) all = _applyFilter(all, filter);
   all.sort((a, b) => b.updatedAt - a.updatedAt);
 
@@ -953,10 +1144,11 @@ async function listEntities({ page = 1, limit = 20, type, since, until, tags, me
  * @param {number|string} id
  * @returns {{ id, type, current, metadata, tags, createdAt, updatedAt, versionCount, versions }}
  */
-async function getHistory(id) {
+async function getHistory(id, { allowedWorkspaces } = {}) {
   _assertInit();
   const e = store.get(Number(id) || id);
   if (!e) throw emitError(Err.notFound(id));
+  if (!_wsAllowed(e, allowedWorkspaces)) throw emitError(Err.forbidden(`No access to workspace "${e.workspaceId || "default"}".`));
 
   // Stored newest-first internally; display oldest-first for readability
   const versionsOldestFirst = [...e.versions].reverse();
@@ -983,9 +1175,9 @@ async function getHistory(id) {
  * Get aggregate database statistics.
  * @returns {{ entities, totalVersions, totalLinks, byType, runningSince }}
  */
-async function getStatus() {
+async function getStatus({ allowedWorkspaces } = {}) {
   _assertInit();
-  const all      = Array.from(store.values());
+  const all      = Array.from(store.values()).filter(e => _wsAllowed(e, allowedWorkspaces));
   const alive    = all.filter(_isAlive);
   const deleted  = all.length - alive.length;
   const byType   = {};
@@ -1010,6 +1202,145 @@ async function getStatus() {
     byWorkspace,
     runningSince:  new Date().toISOString(),
   };
+}
+
+// ─── Markdown Adapter ────────────────────────────────────────────────────────
+// Bridges the gap between agents that think in .md and DBX's NDJSON persistence.
+// exportMarkdown() produces human-readable markdown from entities;
+// importMarkdown() parses it back and ingests each section.
+
+/**
+ * Export entities as human-readable markdown.
+ * Agents can read/write this format instead of touching .dbx directly.
+ *
+ * @param {{ filter?, includeHistory? }} opts
+ * @returns {string} markdown string
+ */
+async function exportMarkdown({ filter, includeHistory = false, allowedWorkspaces } = {}) {
+  _assertInit();
+  let entities = _getAllAlive();
+  if (allowedWorkspaces) entities = entities.filter(e => _wsAllowed(e, allowedWorkspaces));
+  if (filter && Object.keys(filter).length) entities = _applyFilter(entities, filter);
+  entities.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const lines = ["# Database X — Memory Export", ""];
+  lines.push(`> Exported ${entities.length} entities at ${new Date().toISOString()}`, "");
+
+  for (const e of entities) {
+    lines.push(`## [${e.id}] ${(e.type || "text").toUpperCase()}`);
+    lines.push("");
+    lines.push(e.text);
+    lines.push("");
+    lines.push(`- **ID:** ${e.id}`);
+    lines.push(`- **Type:** ${e.type || "text"}`);
+    lines.push(`- **Memory type:** ${e.memoryType || "long-term"}`);
+    lines.push(`- **Workspace:** ${e.workspaceId || "default"}`);
+    lines.push(`- **Classification:** ${e.classification || "internal"}`);
+    lines.push(`- **Tags:** ${(e.tags || []).join(", ") || "none"}`);
+    lines.push(`- **Source:** ${e.source?.type || "user"}${e.source?.actor ? " (" + e.source.actor + ")" : ""}`);
+    lines.push(`- **Created:** ${new Date(e.createdAt).toISOString()}`);
+    lines.push(`- **Updated:** ${new Date(e.updatedAt).toISOString()}`);
+    lines.push(`- **Versions:** ${e.versions?.length || 1}`);
+
+    if (includeHistory && e.versions?.length > 1) {
+      lines.push("");
+      lines.push("### Version History");
+      lines.push("");
+      const versionsOldest = [...e.versions].reverse();
+      for (let i = 0; i < versionsOldest.length; i++) {
+        const v = versionsOldest[i];
+        const delta = v.delta ? ` [${v.delta.type}] ${v.delta.summary}` : " (initial)";
+        lines.push(`${i + 1}. **${new Date(v.timestamp).toISOString()}**${delta}`);
+        if (v.text !== e.text) lines.push(`   > ${v.text.slice(0, 120)}`);
+      }
+    }
+
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Parse a markdown file (in the exportMarkdown format) and ingest each section.
+ * This lets agents write memories as markdown and round-trip into DBX.
+ *
+ * Also supports simple format: any line starting with "- " or "* " is treated
+ * as a separate fact, making it easy for agents to just write bullet lists.
+ *
+ * @param {string} mdText — markdown string
+ * @param {{ source?, classification?, memoryType?, workspaceId?, tags? }} defaults
+ * @returns {{ imported: number, ids: number[] }}
+ */
+async function importMarkdown(mdText, defaults = {}) {
+  _assertInit();
+  const text = String(mdText || "");
+  if (!text.trim()) return { imported: 0, ids: [] };
+
+  const sections = [];
+  const allowedWorkspaces = defaults.allowedWorkspaces;
+
+  // Try structured format first: split on ## headers
+  const headerRe = /^##\s+\[(\d+)\]\s+(.+)/;
+  const lines = text.split("\n");
+  let currentSection = null;
+
+  for (const line of lines) {
+    const headerMatch = line.match(headerRe);
+    if (headerMatch) {
+      if (currentSection) sections.push(currentSection);
+      currentSection = { type: headerMatch[2].trim().toLowerCase(), lines: [] };
+      continue;
+    }
+    if (currentSection) {
+      // Skip metadata lines (start with "- **")
+      if (/^- \*\*/.test(line.trim()) || /^###/.test(line.trim()) || /^---$/.test(line.trim()) || /^>/.test(line.trim())) continue;
+      const trimmed = line.trim();
+      if (trimmed) currentSection.lines.push(trimmed);
+    }
+  }
+  if (currentSection) sections.push(currentSection);
+
+  // If we found structured sections, ingest each
+  if (sections.length > 0) {
+    _skipIO = true;
+    const ids = [];
+    try {
+      for (const sec of sections) {
+        const factText = sec.lines.join(" ").trim();
+        if (!factText) continue;
+        const type = sec.type === "text" ? "text" : sec.type;
+        ids.push(await ingest(factText, { ...defaults, type, allowedWorkspaces }));
+      }
+    } finally {
+      _skipIO = false;
+    }
+    _persistAll();
+    console.log(`[dbx] Imported ${ids.length} entities from structured markdown`);
+    return { imported: ids.length, ids };
+  }
+
+  // Fallback: treat bullet points or plain lines as individual facts
+  const bullets = lines
+    .map(l => l.replace(/^[\s]*[-*]\s+/, "").trim())
+    .filter(l => l.length > 0 && !l.startsWith("#") && !l.startsWith(">"));
+
+  if (!bullets.length) return { imported: 0, ids: [] };
+
+  _skipIO = true;
+  const ids = [];
+  try {
+    for (const fact of bullets) {
+      ids.push(await ingest(fact, { ...defaults, allowedWorkspaces }));
+    }
+  } finally {
+    _skipIO = false;
+  }
+  _persistAll();
+  console.log(`[dbx] Imported ${ids.length} entities from markdown bullets`);
+  return { imported: ids.length, ids };
 }
 
 // ─── Shutdown ─────────────────────────────────────────────────────────────────
@@ -1053,6 +1384,7 @@ module.exports = {
   ingest,
   remember,
   ingestBatch,
+  extractFacts,
   ingestTimeSeries,
   ingestFile,
   query,
@@ -1060,13 +1392,18 @@ module.exports = {
   getMany,
   remove,
   purge,
+  consolidate,
   getGraph,
   traverse,
   listEntities,
   getHistory,
   getStatus,
+  exportMarkdown,
+  importMarkdown,
   shutdown,
   createAgent,
+  // Auth & Workspace ACL
+  auth: _auth,
   // Error → Signal → Learning Loop
   onSignal:     require("./errors").onSignal,
   getSignals:   require("./errors").getSignals,

@@ -7,3 +7,4 @@ CLAUDE.md
 .env
 *.log
 TEMP_CHANGELOG.md
+dashboard.html
