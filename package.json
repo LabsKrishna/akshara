@@ -1,6 +1,6 @@
 {
   "name": "dbx-memory",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Durable, private, time-aware memory engine for long-running AI agents",
   "main": "./index.js",
   "exports": {
