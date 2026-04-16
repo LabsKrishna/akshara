@@ -1,4 +1,4 @@
-// index.js — Database X Core Engine
+// index.js — Smriti Core Engine
 "use strict";
 
 const os     = require("os");
@@ -14,22 +14,23 @@ const { AuthStore } = require("./auth");
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
-  linkThreshold:      Number(process.env.DBX_LINK_THRESHOLD    || 0.72),
-  versionThreshold:   Number(process.env.DBX_VERSION_THRESHOLD || 0.82),
-  graphBoostWeight:   Number(process.env.DBX_GRAPH_BOOST       || 0.01),
+  linkThreshold:      Number(process.env.SMRITI_LINK_THRESHOLD    || 0.72),
+  versionThreshold:   Number(process.env.SMRITI_VERSION_THRESHOLD || 0.82),
+  graphBoostWeight:   Number(process.env.SMRITI_GRAPH_BOOST       || 0.01),
   keywordBoostWeight: 0.05,
-  llmBoostWeight:     Number(process.env.DBX_LLM_BOOST         || 0.08),
-  recencyWeight:      Number(process.env.DBX_RECENCY_WEIGHT    || 0.10),
-  recencyHalfLifeMs:  Number(process.env.DBX_RECENCY_HALFLIFE_DAYS || 30) * 86_400_000,
-  minFinalScore:      Number(process.env.DBX_MIN_SCORE         || 0.45),
-  minSemanticScore:   Number(process.env.DBX_MIN_SEMANTIC      || 0.35),
-  maxVersions:        Number(process.env.DBX_MAX_VERSIONS      || 0), // 0 = unlimited
-  strictEmbeddings:   (process.env.DBX_STRICT_EMBEDDINGS       || "1") !== "0",
-  dataFile:           path.join(process.cwd(), "data.dbx"),
+  llmBoostWeight:     Number(process.env.SMRITI_LLM_BOOST         || 0.08),
+  importanceWeight:   Number(process.env.SMRITI_IMPORTANCE_WEIGHT || 0.05),
+  recencyWeight:      Number(process.env.SMRITI_RECENCY_WEIGHT    || 0.10),
+  recencyHalfLifeMs:  Number(process.env.SMRITI_RECENCY_HALFLIFE_DAYS || 30) * 86_400_000,
+  minFinalScore:      Number(process.env.SMRITI_MIN_SCORE         || 0.45),
+  minSemanticScore:   Number(process.env.SMRITI_MIN_SEMANTIC      || 0.35),
+  maxVersions:        Number(process.env.SMRITI_MAX_VERSIONS      || 0), // 0 = unlimited
+  strictEmbeddings:   (process.env.SMRITI_STRICT_EMBEDDINGS       || "1") !== "0",
+  dataFile:           path.join(process.cwd(), "data.smriti"),
   // embedFn(text, type) — inject your own: `async (text, type) => number[]`.
   // llmFn(text, type) — inject your own: `async (text, type) => { keywords, context, llmTags, importance?, suggestedType? }`.
   // factExtractFn(text, type) — inject your own: `async (text, type) => string[]` (array of discrete fact strings).
-  consolidationThreshold: Number(process.env.DBX_CONSOLIDATION_THRESHOLD || 0.78),
+  consolidationThreshold: Number(process.env.SMRITI_CONSOLIDATION_THRESHOLD || 0.78),
 };
 
 // ─── Module state ─────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ function _serializeEntity(e, { truncateText } = {}) {
     deletedBy:      e.deletedBy || null,
     metadata:       e.metadata || {},
     tags:           e.tags || [],
+    importance:     e.importance != null ? e.importance : null,
     linkCount:      e.links?.size || 0,
     versionCount:   e.versions?.length || 1,
     createdAt:      e.createdAt,
@@ -202,10 +204,11 @@ function _loadData() {
         raw.deletedAt = null;
         raw.deletedBy = null;
       }
-      // Backfill memoryType, workspaceId (added v2 schema), and llmKeywords
+      // Backfill memoryType, workspaceId (added v2 schema), llmKeywords, and importance
       raw.memoryType   = _normalizeMemoryType(raw.memoryType);
       raw.workspaceId  = _normalizeWorkspaceId(raw.workspaceId);
       if (!Array.isArray(raw.llmKeywords)) raw.llmKeywords = raw.metadata?.llm?.keywords || [];
+      if (raw.importance === undefined) raw.importance = null; // null = use heuristic at query time
 
       // Backfill missing per-version source (older data files)
       for (const v of raw.versions) if (!v.source) v.source = raw.source;
@@ -224,10 +227,10 @@ function _loadData() {
       store.set(raw.id, raw);
     } catch (err) {
       emitError(Err.loadFailed(err.message, line.slice(0, 80)));
-      console.warn("[dbx] Skipping malformed line in data file");
+      console.warn("[smriti] Skipping malformed line in data file");
     }
   }
-  console.log(`[dbx] Loaded ${store.size} entities`);
+  console.log(`[smriti] Loaded ${store.size} entities`);
 }
 
 function _persistAll() {
@@ -246,7 +249,7 @@ function _persistAll() {
     // Clean up temp file if rename failed
     try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* best effort */ }
     emitError(Err.persistFailed(err.message, err));
-    console.error(`[dbx] Persistence failed: ${err.message}`);
+    console.error(`[smriti] Persistence failed: ${err.message}`);
   }
 }
 
@@ -326,7 +329,7 @@ async function _enrichWithLLM(text, type) {
       suggestedType: typeof raw.suggestedType === "string" ? raw.suggestedType.slice(0, 50) : null,
     };
   } catch (err) {
-    console.warn(`[dbx] LLM enrichment failed (non-blocking): ${err.message}`);
+    console.warn(`[smriti] LLM enrichment failed (non-blocking): ${err.message}`);
     return null;
   }
 }
@@ -343,7 +346,7 @@ async function _extractFacts(text, type) {
     if (!Array.isArray(raw)) return [];
     return raw.map(String).filter(s => s.trim().length > 0).slice(0, 50);
   } catch (err) {
-    console.warn(`[dbx] Fact extraction failed (non-blocking): ${err.message}`);
+    console.warn(`[smriti] Fact extraction failed (non-blocking): ${err.message}`);
     return [];
   }
 }
@@ -381,7 +384,7 @@ function _relinkEntity(entity) {
  * @param {{ type?, timestamp?, metadata?, tags?, source?, classification? }} opts
  * @returns {number} stable entity ID (never changes across updates)
  */
-async function ingest(text, { type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM = false, allowedWorkspaces } = {}) {
+async function ingest(text, { type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM = false, importance, allowedWorkspaces } = {}) {
   _assertInit();
 
   const ts       = timestamp || Date.now();
@@ -457,12 +460,14 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
     if (llmEnrichment) mergeTarget.metadata.llm = llmEnrichment;
     mergeTarget.tags      = Array.from(new Set([...(mergeTarget.tags || []), ...tags]));
     if (llmEnrichment) mergeTarget.llmKeywords = llmEnrichment.keywords;
+    if (Number.isFinite(importance)) mergeTarget.importance = Math.max(0, Math.min(1, importance));
+    else if (llmEnrichment && Number.isFinite(llmEnrichment.importance)) mergeTarget.importance = llmEnrichment.importance;
 
     _relinkEntity(mergeTarget);
     _persistAll();
     const flag = delta.contradicts ? " ⚠ CONTRADICTS prior version" : "";
     const verb = isConsolidation ? "Consolidated into" : "Updated";
-    console.log(`[dbx] ${verb} entity ${mergeTarget.id} → v${mergeTarget.versions.length} [${delta.type}]${flag} ${delta.summary}`);
+    console.log(`[smriti] ${verb} entity ${mergeTarget.id} → v${mergeTarget.versions.length} [${delta.type}]${flag} ${delta.summary}`);
     return mergeTarget.id;
   }
 
@@ -482,6 +487,8 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
     deletedBy: null,
     metadata:  enrichedMeta,
     tags:      Array.isArray(tags) ? [...tags] : [],
+    importance:  Number.isFinite(importance) ? Math.max(0, Math.min(1, importance))
+                 : llmEnrichment ? (llmEnrichment.importance || 0.5) : null,
     llmKeywords: llmEnrichment ? llmEnrichment.keywords : [],
     links:     new Set(),
     createdAt: ts,
@@ -492,7 +499,7 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
   store.set(id, entity);
   _relinkEntity(entity);
   _appendEntity(entity);
-  console.log(`[dbx] Created entity ${id} [${type}]`);
+  console.log(`[smriti] Created entity ${id} [${type}]`);
   return id;
 }
 
@@ -510,6 +517,7 @@ async function remember(text, opts = {}) {
     ...opts,
     source,
     classification: opts.classification || "internal",
+    importance: opts.importance,
     allowedWorkspaces: opts.allowedWorkspaces,
   });
 }
@@ -577,7 +585,7 @@ async function extractFacts(text, opts = {}) {
   }
   _persistAll();
 
-  console.log(`[dbx] Extracted ${facts.length} facts from raw text`);
+  console.log(`[smriti] Extracted ${facts.length} facts from raw text`);
   return { facts, ids };
 }
 
@@ -722,6 +730,26 @@ function _applyFilter(entities, { type, since, until, tags, memoryType, workspac
   });
 }
 
+// ─── Importance Heuristic ────────────────────────────────────────────────────
+// When no explicit importance is set and no LLM enrichment exists, derive a
+// heuristic score from structural signals so that importance scoring always
+// has a meaningful signal. Frequently updated, well-connected, and contradicted
+// entities are considered more important.
+
+function _computeImportance(entity) {
+  // 1. Explicit importance (set via ingest { importance } or agent.remember)
+  if (entity.importance != null && Number.isFinite(entity.importance)) return entity.importance;
+
+  // 2. LLM-derived importance
+  if (entity.metadata?.llm?.importance != null) return entity.metadata.llm.importance;
+
+  // 3. Heuristic: version count (0.4) + link count (0.3) + contradiction (0.3)
+  const versionSignal = Math.min((entity.versions?.length || 1) - 1, 10) / 10;
+  const linkSignal    = Math.min(entity.links?.size || 0, 10) / 10;
+  const hasContradiction = (entity.versions || []).some(v => v.delta?.contradicts) ? 1 : 0;
+  return Math.min(1, versionSignal * 0.4 + linkSignal * 0.3 + hasContradiction * 0.3);
+}
+
 // ─── Parallel Hybrid Query ────────────────────────────────────────────────────
 
 async function _runWorkers(queryVector, queryTerms, subset, { now = Date.now(), useRecency = true } = {}) {
@@ -733,6 +761,7 @@ async function _runWorkers(queryVector, queryTerms, subset, { now = Date.now(), 
     graphBoostWeight:   CFG.graphBoostWeight,
     keywordBoostWeight: CFG.keywordBoostWeight,
     llmBoostWeight:     CFG.llmBoostWeight,
+    importanceWeight:   CFG.importanceWeight,
     recencyWeight:      CFG.recencyWeight,
     recencyHalfLifeMs:  CFG.recencyHalfLifeMs,
     minFinalScore:      CFG.minFinalScore,
@@ -754,6 +783,7 @@ async function _runWorkers(queryVector, queryTerms, subset, { now = Date.now(), 
       updatedAt:   e.updatedAt,
       links:       { size: e.links?.size || 0 },
       llmKeywords: e.llmKeywords || [],
+      importance:  _computeImportance(e),
     }));
 
     promises.push(_pool.run({ chunk, queryVector, queryTerms, config: jobConfig }));
@@ -828,12 +858,12 @@ async function query(text, { limit = 10, maxTokens = null, filter = {}, asOf = n
 
   if (Object.keys(merged).length) subset = _applyFilter(subset, merged);
 
-  console.time("[dbx] query");
+  console.time("[smriti] query");
   const raw = await _runWorkers(queryVector, queryTerms, subset, {
     now:        asOf !== null ? asOf : Date.now(),
     useRecency: asOf === null,
   });
-  console.timeEnd("[dbx] query");
+  console.timeEnd("[smriti] query");
 
   const sorted = raw
     .sort((a, b) => b.score - a.score)
@@ -944,7 +974,7 @@ async function remove(id, { deletedBy, allowedWorkspaces } = {}) {
   e.deletedBy = deletedBy ? _normalizeSource(deletedBy) : null;
 
   _persistAll();
-  console.log(`[dbx] Soft-deleted entity ${numId}`);
+  console.log(`[smriti] Soft-deleted entity ${numId}`);
 }
 
 // ─── Purge Entity (Hard Delete) ──────────────────────────────────────────────
@@ -965,7 +995,7 @@ async function purge(id, { allowedWorkspaces } = {}) {
   _unlinkEntity(e, numId);
   store.delete(numId);
   _persistAll();
-  console.log(`[dbx] Purged entity ${numId} (permanent)`);
+  console.log(`[smriti] Purged entity ${numId} (permanent)`);
 }
 
 // ─── Memory Consolidation ────────────────────────────────────────────────────
@@ -1052,7 +1082,7 @@ async function consolidate({ threshold, dryRun = false, type, allowedWorkspaces 
   if (!dryRun && merged.length) _persistAll();
 
   const verb = dryRun ? "Would merge" : "Merged";
-  console.log(`[dbx] ${verb} ${merged.length} duplicate(s) across ${clusters.size} cluster(s)`);
+  console.log(`[smriti] ${verb} ${merged.length} duplicate(s) across ${clusters.size} cluster(s)`);
   return { merged, totalMerged: merged.length };
 }
 
@@ -1234,13 +1264,13 @@ async function getStatus({ allowedWorkspaces } = {}) {
 }
 
 // ─── Markdown Adapter ────────────────────────────────────────────────────────
-// Bridges the gap between agents that think in .md and DBX's NDJSON persistence.
+// Bridges the gap between agents that think in .md and Smriti's NDJSON persistence.
 // exportMarkdown() produces human-readable markdown from entities;
 // importMarkdown() parses it back and ingests each section.
 
 /**
  * Export entities as human-readable markdown.
- * Agents can read/write this format instead of touching .dbx directly.
+ * Agents can read/write this format instead of touching .smriti directly.
  *
  * @param {{ filter?, includeHistory? }} opts
  * @returns {string} markdown string
@@ -1252,7 +1282,7 @@ async function exportMarkdown({ filter, includeHistory = false, allowedWorkspace
   if (filter && Object.keys(filter).length) entities = _applyFilter(entities, filter);
   entities.sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const lines = ["# Database X — Memory Export", ""];
+  const lines = ["# Smriti — Memory Export", ""];
   lines.push(`> Exported ${entities.length} entities at ${new Date().toISOString()}`, "");
 
   for (const e of entities) {
@@ -1294,7 +1324,7 @@ async function exportMarkdown({ filter, includeHistory = false, allowedWorkspace
 
 /**
  * Parse a markdown file (in the exportMarkdown format) and ingest each section.
- * This lets agents write memories as markdown and round-trip into DBX.
+ * This lets agents write memories as markdown and round-trip into Smriti.
  *
  * Also supports simple format: any line starting with "- " or "* " is treated
  * as a separate fact, making it easy for agents to just write bullet lists.
@@ -1347,7 +1377,7 @@ async function importMarkdown(mdText, defaults = {}) {
       _skipIO = false;
     }
     _persistAll();
-    console.log(`[dbx] Imported ${ids.length} entities from structured markdown`);
+    console.log(`[smriti] Imported ${ids.length} entities from structured markdown`);
     return { imported: ids.length, ids };
   }
 
@@ -1368,8 +1398,123 @@ async function importMarkdown(mdText, defaults = {}) {
     _skipIO = false;
   }
   _persistAll();
-  console.log(`[dbx] Imported ${ids.length} entities from markdown bullets`);
+  console.log(`[smriti] Imported ${ids.length} entities from markdown bullets`);
   return { imported: ids.length, ids };
+}
+
+// ─── Progressive Context Loading ─────────────────────────────────────────────
+// Returns the most critical memories in minimal tokens so agents can boot
+// without scanning the full store. No embedding/query needed — ranks by a
+// composite of importance, recency, connectivity, and update frequency.
+
+/**
+ * Get a token-budgeted startup summary of the most critical memories.
+ * Designed for agent boot: returns essential context in minimal tokens.
+ *
+ * Scoring (no query vector needed):
+ *   importance × 0.4 + recency × 0.3 + connectivity × 0.15 + activity × 0.15
+ *
+ * @param {{ maxTokens?, maxItems?, depth?, filter?, allowedWorkspaces? }} opts
+ *   - maxTokens:  token budget (default 500; ~4 chars/token)
+ *   - maxItems:   hard cap on items (default depends on depth)
+ *   - depth:      "essential" (top 5), "standard" (top 20), "full" (top 50)
+ *   - filter:     standard filter object (type, tags, memoryType, workspaceId)
+ *   - allowedWorkspaces: workspace isolation array
+ * @returns {{ summary, items }}
+ */
+async function getStartupSummary({
+  maxTokens = 500,
+  maxItems,
+  depth = "standard",
+  filter = {},
+  allowedWorkspaces,
+} = {}) {
+  _assertInit();
+
+  const depthLimits = { essential: 5, standard: 20, full: 50 };
+  const itemCap = maxItems || depthLimits[depth] || depthLimits.standard;
+  const safeMaxTokens = Math.max(1, Math.floor(Number(maxTokens) || 500));
+
+  let candidates = _getAllAlive();
+  if (allowedWorkspaces) candidates = candidates.filter(e => _wsAllowed(e, allowedWorkspaces));
+  if (Object.keys(filter).length) candidates = _applyFilter(candidates, filter);
+
+  if (candidates.length === 0) {
+    return {
+      summary: { totalMemories: 0, itemsReturned: 0, tokenUsage: { budget: safeMaxTokens, used: 0 }, depth, generatedAt: new Date().toISOString() },
+      items: [],
+    };
+  }
+
+  // Pre-compute normalization bounds
+  const now = Date.now();
+  const halfLifeMs = CFG.recencyHalfLifeMs || 30 * 86_400_000;
+  let maxLinks = 0, maxVersions = 0;
+  for (const e of candidates) {
+    const lc = e.links?.size || 0;
+    const vc = e.versions?.length || 1;
+    if (lc > maxLinks)    maxLinks = lc;
+    if (vc > maxVersions) maxVersions = vc;
+  }
+
+  // Score each candidate without a query vector
+  const scored = [];
+  for (const e of candidates) {
+    // Importance: from LLM enrichment metadata, default 0.5
+    const importance = (e.metadata?.llm?.importance != null)
+      ? Math.max(0, Math.min(1, Number(e.metadata.llm.importance)))
+      : 0.5;
+
+    // Recency: exponential half-life decay (same formula as kernel.js)
+    const ageMs = Math.max(0, now - (e.updatedAt || e.createdAt || now));
+    const recency = Math.exp(-Math.LN2 * ageMs / halfLifeMs);
+
+    // Connectivity: normalized link count
+    const connectivity = maxLinks > 0 ? Math.min(e.links?.size || 0, 10) / Math.min(maxLinks, 10) : 0;
+
+    // Activity: normalized version count (frequently updated = important)
+    const activity = maxVersions > 1 ? Math.min((e.versions?.length || 1) - 1, 20) / Math.min(maxVersions - 1, 20) : 0;
+
+    const score = importance * 0.4 + recency * 0.3 + connectivity * 0.15 + activity * 0.15;
+
+    scored.push({ entity: e, score, importance, recency });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Token-budgeted packing (same ~4 chars/token heuristic as query())
+  const items = [];
+  let tokensUsed = 0;
+  for (const { entity: e, score, importance, recency } of scored) {
+    if (items.length >= itemCap) break;
+    const textTokens = Math.ceil(e.text.length / 4);
+    const itemTokens = textTokens + 20; // metadata overhead
+    if (items.length > 0 && tokensUsed + itemTokens > safeMaxTokens) break;
+    tokensUsed += itemTokens;
+    items.push({
+      id:           e.id,
+      type:         e.type || "text",
+      text:         e.text,
+      score:        +score.toFixed(4),
+      importance:   +importance.toFixed(4),
+      recency:      +recency.toFixed(4),
+      memoryType:   e.memoryType || "long-term",
+      tags:         e.tags || [],
+      updatedAt:    e.updatedAt,
+      versionCount: e.versions?.length || 1,
+    });
+  }
+
+  return {
+    summary: {
+      totalMemories: candidates.length,
+      itemsReturned: items.length,
+      tokenUsage:    { budget: safeMaxTokens, used: tokensUsed },
+      depth,
+      generatedAt:   new Date().toISOString(),
+    },
+    items,
+  };
 }
 
 // ─── Shutdown ─────────────────────────────────────────────────────────────────
@@ -1382,7 +1527,7 @@ async function shutdown() {
   _persistAll();
   if (_pool) { await _pool.stop(); _pool = null; }
   _initialized = false;
-  console.log("[dbx] Shutdown complete");
+  console.log("[smriti] Shutdown complete");
 }
 
 // ─── Agent Helper ────────────────────────────────────────────────────────────
@@ -1427,6 +1572,7 @@ module.exports = {
   listEntities,
   getHistory,
   getStatus,
+  getStartupSummary,
   exportMarkdown,
   importMarkdown,
   shutdown,

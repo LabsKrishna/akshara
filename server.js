@@ -1,4 +1,4 @@
-// server.js — Database X HTTP Server
+// server.js — Smriti HTTP Server
 "use strict";
 
 const express = require("express");
@@ -51,8 +51,10 @@ function _wrap(fn) {
 // ─── Shared body extraction for ingest-like endpoints ────────────────────────
 
 function _ingestParams(body) {
-  const { text, type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM } = body || {};
-  return { text, type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM: !!useLLM };
+  const { text, type = "text", timestamp, metadata = {}, tags = [], source, classification, retention, memoryType, workspaceId, useLLM, importance } = body || {};
+  const p = { text, type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM: !!useLLM };
+  if (importance != null) p.importance = Number(importance);
+  return p;
 }
 
 // ─── Auth Middleware ─────────────────────────────────────────────────────────
@@ -339,9 +341,9 @@ app.get("/auth/audit", _wrap(async (req) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 lib.init().then(() => {
-  const PORT = Number(process.env.DBX_PORT) || 3000;
+  const PORT = Number(process.env.SMRITI_PORT) || 3000;
   const server = app.listen(PORT, () => {
-    console.log(`Database X running on http://localhost:${PORT}`);
+    console.log(`Smriti running on http://localhost:${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}/`);
     console.log("Endpoints:");
     console.log("  POST   /ingest                  { text, type?, metadata?, tags?, timestamp?, source?, classification?, retention?, memoryType?, workspaceId?, useLLM? }");
@@ -376,7 +378,7 @@ lib.init().then(() => {
 
   // Graceful shutdown on SIGTERM / SIGINT
   const stop = async (signal) => {
-    console.log(`\n[dbx] ${signal} received — shutting down…`);
+    console.log(`\n[smriti] ${signal} received — shutting down…`);
     server.close(async () => {
       await lib.shutdown();
       process.exit(0);

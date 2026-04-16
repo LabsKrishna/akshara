@@ -1,4 +1,4 @@
-// versioning.js — Intelligent Delta Engine for Database X
+// versioning.js — Intelligent Delta Engine for Smriti
 
 const { cosine } = require("./kernel");
 

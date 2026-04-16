@@ -1,9 +1,9 @@
 # CLAUDE.md - Product Direction and Engineering Constitution
 
 **Last Updated:** 2026-04-09  
-**Project:** Database X
+**Project:** Smriti
 
-This file defines the product direction, engineering goals, and transformation path for Database X. All major decisions should support this document.
+This file defines the product direction, engineering goals, and transformation path for Smriti. All major decisions should support this document.
 
 ## Change Recording Rule
 
@@ -11,13 +11,13 @@ Every meaningful repository change must be recorded in `TEMP_CHANGELOG.md` so hu
 
 ## 1. Product Goal
 
-Database X is no longer just a lightweight semantic memory engine.
+Smriti is no longer just a lightweight semantic memory engine.
 
 The target product is:
 
 **A durable, private, time-aware memory system for long-running AI agents.**
 
-The goal is to make Database X useful for teams building:
+The goal is to make Smriti useful for teams building:
 
 - AI agents with long-term memory
 - Enterprise copilots with private context
@@ -37,11 +37,11 @@ We are building toward a stronger position:
 
 The core story should be:
 
-**Database X helps AI systems remember accurately over time.**
+**Smriti helps AI systems remember accurately over time.**
 
 ## 3. Target Outcomes
 
-To be compelling to advanced AI companies or serious product teams, Database X should achieve these outcomes:
+To be compelling to advanced AI companies or serious product teams, Smriti should achieve these outcomes:
 
 ### Outcome A: Production-usable agent memory
 
@@ -71,7 +71,7 @@ To be compelling to advanced AI companies or serious product teams, Database X s
 These are non-negotiable:
 
 1. **Simple by default**
-Database X must remain readable, explicit, and easy to integrate.
+Smriti must remain readable, explicit, and easy to integrate.
 
 2. **Built for agents**
 The system should optimize for long-running agent workflows, not only developer demos.
@@ -109,7 +109,7 @@ Required improvements:
 
 Goals:
 
-- Make Database X useful inside real agent loops
+- Make Smriti useful inside real agent loops
 - Support separation between short-term and long-term memory
 - Improve memory selection and storage decisions
 
@@ -138,7 +138,7 @@ Required improvements:
 
 ## 6. Regulatory and Compliance Requirements
 
-Database X is not a compliance product by default, but it should be built so regulated teams can adopt it safely.
+Smriti is not a compliance product by default, but it should be built so regulated teams can adopt it safely.
 
 The relevant regulatory and compliance targets include:
 
@@ -191,7 +191,7 @@ These requirements should influence product design from the start.
 
 ### Product implication
 
-If Database X targets enterprise agents, internal copilots, or regulated workflows, compliance cannot be treated as a later add-on.
+If Smriti targets enterprise agents, internal copilots, or regulated workflows, compliance cannot be treated as a later add-on.
 
 It must shape:
 
@@ -228,7 +228,7 @@ Avoid these traps:
 
 Use this framing consistently:
 
-**Database X is a memory engine for long-running AI agents that need durable, private, and time-aware recall.**
+**Smriti is a memory engine for long-running AI agents that need durable, private, and time-aware recall.**
 
 Secondary framing:
 
@@ -277,7 +277,7 @@ In addition, the data model should be able to evolve toward:
 
 ## 12. Success Criteria
 
-We are moving in the right direction if Database X can eventually demonstrate:
+We are moving in the right direction if Smriti can eventually demonstrate:
 
 - Better agent recall across sessions
 - Better answers about changing information over time
@@ -289,7 +289,7 @@ We are moving in the right direction if Database X can eventually demonstrate:
 
 Before adding a feature, ask:
 
-1. Does this make Database X better as an agent memory system?
+1. Does this make Smriti better as an agent memory system?
 2. Does this improve time-aware recall or change understanding?
 3. Does this strengthen privacy, trust, or auditability?
 4. Does this support enterprise or regulatory readiness?

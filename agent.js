@@ -1,19 +1,19 @@
-// agent.js — Lightweight agent helper for Database X
+// agent.js — Lightweight agent helper for Smriti
 // A thin, opinionated wrapper that gives agents a clean, high-level interface
 // for durable memory. Completely optional — the raw API works just as well.
 "use strict";
 
 /**
- * Create an AgentMemory instance backed by a Database X engine.
+ * Create an AgentMemory instance backed by a Smriti engine.
  *
  * @param {object} engine — the core lib (index.js exports) or a remote client
  * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
  * @returns {AgentMemory}
  *
  * @example
- * const dbx = require("dbx-memory");
- * await dbx.init({ ... });
- * const agent = dbx.createAgent({ name: "budget-planner" });
+ * const smriti = require("smriti-db");
+ * await smriti.init({ ... });
+ * const agent = smriti.createAgent({ name: "budget-planner" });
  * await agent.remember("Q2 budget is 2.4M");
  * await agent.update("Q2 budget is now 2.7M");
  * const results = await agent.recall("Q2 budget");
@@ -112,6 +112,24 @@ class AgentMemory {
     const merged = this._mergeOpts(opts);
     if (opts.allowedWorkspaces) merged.allowedWorkspaces = opts.allowedWorkspaces;
     return this._engine.extractFacts(text, merged);
+  }
+
+  /**
+   * Boot the agent with a token-budgeted summary of the most critical memories.
+   * Call once at startup instead of searching the full store.
+   *
+   * @param {{ maxTokens?, maxItems?, depth?, filter? }} [opts]
+   *   - maxTokens:  token budget (default 500)
+   *   - maxItems:   hard cap on returned items
+   *   - depth:      "essential" | "standard" | "full"
+   *   - filter:     standard filter object (type, tags, memoryType, workspaceId)
+   * @returns {Promise<{ summary, items }>}
+   */
+  async boot(opts = {}) {
+    return this._engine.getStartupSummary({
+      ...opts,
+      allowedWorkspaces: opts.allowedWorkspaces,
+    });
   }
 
   /**

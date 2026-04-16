@@ -1,4 +1,4 @@
-// server.mjs — ESM wrapper for Database X HTTP Server
+// server.mjs — ESM wrapper for Smriti HTTP Server
 // Allows `import` of the server entry point in ESM environments.
 
 import { createRequire } from "module";

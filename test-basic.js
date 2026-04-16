@@ -1,4 +1,4 @@
-// test-basic.js — Database X foundation tests
+// test-basic.js — Smriti foundation tests
 // Run: node test-basic.js
 "use strict";
 
@@ -54,21 +54,21 @@ const INIT_OPTS = {
   await test("ingest() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.ingest("test"),
-      /dbx\.init\(\)/i
+      /smriti\.init\(\)/i
     );
   });
 
   await test("query() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.query("test"),
-      /dbx\.init\(\)/i
+      /smriti\.init\(\)/i
     );
   });
 
   await test("get() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.get(1),
-      /dbx\.init\(\)/i
+      /smriti\.init\(\)/i
     );
   });
 
@@ -523,6 +523,147 @@ const INIT_OPTS = {
       () => lib.traverse(999999999),
       /not found/i
     );
+  });
+
+  console.log("\n── getStartupSummary (progressive context loading) ────────────");
+
+  // Re-init with a known set of entities for summary tests
+  await lib.init(INIT_OPTS);
+
+  await test("getStartupSummary() returns empty when store is empty", async () => {
+    const result = await lib.getStartupSummary();
+    assert.strictEqual(result.summary.totalMemories, 0);
+    assert.strictEqual(result.items.length, 0);
+    assert.strictEqual(result.summary.tokenUsage.used, 0);
+  });
+
+  // Populate with varying ages and connectivity
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const recentId = await lib.ingest("critical production alert: payment service is down", {
+    timestamp: now, tags: ["critical", "ops"],
+  });
+  const oldId = await lib.ingest("team offsite planned for next quarter", {
+    timestamp: now - 60 * DAY, tags: ["planning"],
+  });
+  const middleId = await lib.ingest("quarterly revenue reached four million dollars", {
+    timestamp: now - 5 * DAY, tags: ["finance"],
+  });
+  // Create a frequently-updated entity (multiple versions)
+  const updatedId = await lib.ingest("deployment target is kubernetes on aws", {
+    timestamp: now - 10 * DAY, tags: ["infra"],
+  });
+  await lib.ingest("deployment target is kubernetes on gcp instead of aws", {
+    timestamp: now - 3 * DAY, tags: ["infra"],
+  });
+
+  await test("getStartupSummary() returns ranked items without a query", async () => {
+    const result = await lib.getStartupSummary({ maxTokens: 2000 });
+    assert.ok(result.summary.totalMemories > 0);
+    assert.ok(result.items.length > 0);
+    assert.ok(result.summary.generatedAt);
+    // Each item should have the expected fields
+    const first = result.items[0];
+    assert.ok("id" in first);
+    assert.ok("score" in first);
+    assert.ok("importance" in first);
+    assert.ok("recency" in first);
+    assert.ok("text" in first);
+    assert.ok("versionCount" in first);
+  });
+
+  await test("most recent item ranks higher than old item", async () => {
+    const result = await lib.getStartupSummary({ maxTokens: 5000 });
+    const ids = result.items.map(i => i.id);
+    const recentIdx = ids.indexOf(recentId);
+    const oldIdx = ids.indexOf(oldId);
+    assert.ok(recentIdx >= 0, "recent item should be in results");
+    assert.ok(oldIdx >= 0, "old item should be in results");
+    assert.ok(recentIdx < oldIdx, "recent item should rank higher (lower index) than old item");
+  });
+
+  await test("depth 'essential' caps at 5 items", async () => {
+    const result = await lib.getStartupSummary({ depth: "essential", maxTokens: 50000 });
+    assert.ok(result.items.length <= 5);
+    assert.strictEqual(result.summary.depth, "essential");
+  });
+
+  await test("depth 'full' allows up to 50 items", async () => {
+    const result = await lib.getStartupSummary({ depth: "full", maxTokens: 50000 });
+    assert.strictEqual(result.summary.depth, "full");
+  });
+
+  await test("maxTokens budget is respected", async () => {
+    const result = await lib.getStartupSummary({ maxTokens: 50 });
+    assert.ok(result.summary.tokenUsage.used <= 50 + 30, "token usage should stay near budget");
+    assert.ok(result.items.length >= 1, "should return at least one item");
+    assert.ok(result.items.length < 4, "small budget should limit items returned");
+  });
+
+  await test("filter narrows results", async () => {
+    const result = await lib.getStartupSummary({ maxTokens: 5000, filter: { tags: ["finance"] } });
+    assert.ok(result.items.length >= 1);
+    assert.ok(result.items.every(i => i.tags.includes("finance")));
+  });
+
+  await test("scores are sorted descending", async () => {
+    const result = await lib.getStartupSummary({ maxTokens: 5000 });
+    for (let i = 1; i < result.items.length; i++) {
+      assert.ok(result.items[i - 1].score >= result.items[i].score,
+        `item ${i - 1} score ${result.items[i - 1].score} should be >= item ${i} score ${result.items[i].score}`);
+    }
+  });
+
+  console.log("\n── agent.boot() ─────────────────────────────────────────────────");
+
+  await test("agent.boot() returns startup summary", async () => {
+    const agent = lib.createAgent({ name: "boot-test" });
+    const result = await agent.boot({ maxTokens: 2000 });
+    assert.ok(result.summary);
+    assert.ok(result.items.length > 0);
+  });
+
+  console.log("\n── importance scoring ────────────────────────────────────────────");
+
+  await lib.init({ ...INIT_OPTS, importanceWeight: 0.05 });
+
+  await test("explicit importance stored on entity", async () => {
+    const id = await lib.ingest("critical security policy update", { importance: 0.95 });
+    const e = await lib.get(id);
+    assert.ok(e.importance === 0.95, `expected 0.95, got ${e.importance}`);
+  });
+
+  await test("importance clamped to 0-1 range", async () => {
+    const id = await lib.ingest("over-importance", { importance: 5 });
+    const e = await lib.get(id);
+    assert.ok(e.importance === 1, `expected 1, got ${e.importance}`);
+  });
+
+  await test("query results include importanceBoost field", async () => {
+    const r = await lib.query("security policy", { limit: 5 });
+    assert.ok(r.results.length >= 1, "should return results");
+    const first = r.results[0];
+    assert.ok(typeof first.importanceBoost === "number", "should have importanceBoost");
+    assert.ok(typeof first.importance === "number", "should have importance");
+  });
+
+  await test("high-importance memory scores higher than low-importance", async () => {
+    await lib.init({ ...INIT_OPTS, importanceWeight: 0.10 });
+    await lib.ingest("critical security vulnerability patch requires immediate deployment", { importance: 0.9 });
+    await lib.ingest("the office coffee machine brand is keurig model platinum", { importance: 0.1 });
+    const r = await lib.query("security vulnerability patch deployment", { limit: 5 });
+    assert.ok(r.results.length >= 1, "should return at least 1 result");
+    assert.ok(r.results[0].importance >= 0.9,
+      `first result importance ${r.results[0].importance} should be >= 0.9`);
+    assert.ok(r.results[0].importanceBoost > 0,
+      `importanceBoost ${r.results[0].importanceBoost} should be > 0`);
+  });
+
+  await test("importance defaults to null when not set", async () => {
+    await lib.init(INIT_OPTS);
+    const id = await lib.ingest("a simple fact without importance");
+    const e = await lib.get(id);
+    assert.ok(e.importance === null, `expected null, got ${e.importance}`);
   });
 
   // ── Results ───────────────────────────────────────────────────────────────

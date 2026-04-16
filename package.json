@@ -1,5 +1,5 @@
 {
-  "name": "dbx-memory",
+  "name": "smriti-db",
   "version": "1.2.1",
   "description": "Durable, private, time-aware memory engine for long-running AI agents",
   "main": "./index.js",
@@ -26,13 +26,14 @@
     }
   },
   "bin": {
-    "dbx": "bin/cli.js",
-    "dbx-mcp": "mcp.js"
+    "smriti": "bin/cli.js",
+    "smriti-mcp": "mcp.js"
   },
   "scripts": {
     "start": "node server.js",
     "test": "node test-basic.js && node test-versioning.js && node test-agent-simulation.js",
-    "bench": "node bench/agent-memory/run-all.js"
+    "bench": "node bench/agent-memory/run-all.js",
+    "bench:real": "node bench/agent-memory/bench-eval-real.js"
   },
   "keywords": [
     "ai-memory",
@@ -72,12 +73,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LabsKrishna/dbx.git"
+    "url": "git+https://github.com/LabsKrishna/smriti-db.git"
   },
   "bugs": {
-    "url": "https://github.com/LabsKrishna/dbx/issues"
+    "url": "https://github.com/LabsKrishna/smriti-db/issues"
   },
-  "homepage": "https://github.com/LabsKrishna/dbx#readme",
+  "homepage": "https://github.com/LabsKrishna/smriti-db#readme",
   "type": "commonjs",
   "engines": {
     "node": ">=18.0.0"

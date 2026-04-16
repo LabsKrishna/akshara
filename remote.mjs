@@ -1,5 +1,5 @@
-// remote.mjs — ESM wrapper for Database X Remote Client
-// Enables `import { connect } from "dbx-memory/remote"` in ESM environments.
+// remote.mjs — ESM wrapper for Smriti Remote Client
+// Enables `import { connect } from "smriti-db/remote"` in ESM environments.
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);

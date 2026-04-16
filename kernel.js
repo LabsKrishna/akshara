@@ -22,6 +22,7 @@ function makeHybridKernel({
   graphBoostWeight   = 0.01,
   keywordBoostWeight = 0.05,
   llmBoostWeight     = 0.08,
+  importanceWeight   = 0.05,
   recencyWeight      = 0.10,
   recencyHalfLifeMs  = 30 * 86_400_000, // 30 days
   minFinalScore      = 0.45,
@@ -56,24 +57,30 @@ function makeHybridKernel({
       llmBoost = (llmMatches / queryTerms.length) * llmBoostWeight;
     }
 
+    // Importance boost: agents can prioritize high-value memories within tight budgets.
+    // importance is pre-computed per entity (0-1): explicit > LLM-derived > heuristic.
+    const importanceBoost = (entity.importance || 0) * importanceWeight;
+
     let recencyBoost = 0;
     if (useRecency && entity.updatedAt) {
       const ageMs = Math.max(0, now - entity.updatedAt);
       recencyBoost = recencyWeight * Math.exp(-Math.LN2 * ageMs / recencyHalfLifeMs);
     }
 
-    const score = Math.min(1, semantic + graphBoost + kwBoost + llmBoost + recencyBoost);
+    const score = Math.min(1, semantic + graphBoost + kwBoost + llmBoost + importanceBoost + recencyBoost);
     if (score < minFinalScore) return null;
 
     return {
-      id:        entity.id,
-      text:      entity.text,
-      type:      entity.type || "text",
-      score:     +score.toFixed(4),
-      semantic:  +semantic.toFixed(4),
-      recency:   +recencyBoost.toFixed(4),
-      llmBoost:  +llmBoost.toFixed(4),
-      updatedAt: entity.updatedAt || null,
+      id:              entity.id,
+      text:            entity.text,
+      type:            entity.type || "text",
+      score:           +score.toFixed(4),
+      semantic:        +semantic.toFixed(4),
+      recency:         +recencyBoost.toFixed(4),
+      llmBoost:        +llmBoost.toFixed(4),
+      importanceBoost: +importanceBoost.toFixed(4),
+      importance:      +(entity.importance || 0).toFixed(4),
+      updatedAt:       entity.updatedAt || null,
     };
   };
 }

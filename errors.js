@@ -1,4 +1,4 @@
-// errors.js — Error → Signal → Learning Loop for Database X
+// errors.js — Error → Signal → Learning Loop for Smriti
 //
 // Every error is a signal. Signals carry structure. Structure enables learning.
 // Agents subscribe to signals and adapt behavior based on error patterns.
@@ -6,7 +6,7 @@
 
 // ─── Typed Error ─────────────────────────────────────────────────────────────
 
-class DatabaseXError extends Error {
+class SmritiError extends Error {
   /**
    * @param {string} code       — machine-readable error code (e.g. "ERR_PERSIST_FAILED")
    * @param {string} message    — human-readable detail
@@ -17,7 +17,7 @@ class DatabaseXError extends Error {
    */
   constructor(code, message, { recoverable = false, suggestion, context } = {}) {
     super(message);
-    this.name = "DatabaseXError";
+    this.name = "SmritiError";
     this.code = code;
     this.recoverable = recoverable;
     this.suggestion = suggestion || null;
@@ -110,7 +110,7 @@ function resetSignals() {
 // ─── Signal Emitters (used by engine internals) ──────────────────────────────
 
 function emitError(err) {
-  if (err instanceof DatabaseXError) {
+  if (err instanceof SmritiError) {
     _emit(err.toJSON());
   } else {
     _emit({
@@ -129,67 +129,67 @@ function emitError(err) {
 
 const Err = {
   notInitialized: () =>
-    new DatabaseXError(Codes.NOT_INITIALIZED, "Database X not initialized. Call await dbx.init() first.", {
+    new SmritiError(Codes.NOT_INITIALIZED, "Smriti not initialized. Call await smriti.init() first.", {
       recoverable: true,
       suggestion: "Call init() before any operation.",
     }),
 
   notFound: (id) =>
-    new DatabaseXError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
+    new SmritiError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
       recoverable: false,
       context: { entityId: id },
     }),
 
   alreadyDeleted: (id) =>
-    new DatabaseXError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
+    new SmritiError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
       recoverable: false,
       context: { entityId: id },
       suggestion: "Use purge() for permanent removal, or get() to inspect the soft-deleted entity.",
     }),
 
   embeddingFailed: (detail) =>
-    new DatabaseXError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
+    new SmritiError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check your embedFn configuration or retry.",
     }),
 
   persistFailed: (detail, cause) =>
-    new DatabaseXError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
+    new SmritiError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check disk space and file permissions.",
       context: { cause: cause?.code || cause?.message },
     }),
 
   loadFailed: (detail, line) =>
-    new DatabaseXError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
+    new SmritiError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
       recoverable: true,
       suggestion: "Inspect the data file for corruption. The malformed line was skipped.",
       context: { line },
     }),
 
   validation: (detail) =>
-    new DatabaseXError(Codes.VALIDATION, detail, {
+    new SmritiError(Codes.VALIDATION, detail, {
       recoverable: false,
       suggestion: "Check the input parameters.",
     }),
 
   workerFailed: (detail) =>
-    new DatabaseXError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
+    new SmritiError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
       recoverable: true,
       suggestion: "Query will retry on the main thread if workers fail.",
     }),
 
   authFailed: () =>
-    new DatabaseXError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
+    new SmritiError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
       recoverable: false,
       suggestion: "Include an Authorization: Bearer <token> header.",
     }),
 
   forbidden: (detail) =>
-    new DatabaseXError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
+    new SmritiError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
       recoverable: false,
       suggestion: "Check your workspace role. Required permission may be read, write, admin, or owner.",
     }),
 };
 
-module.exports = { DatabaseXError, Codes, Err, emitError, onSignal, getSignals, resetSignals };
+module.exports = { SmritiError, Codes, Err, emitError, onSignal, getSignals, resetSignals };

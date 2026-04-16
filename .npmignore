@@ -1,8 +1,8 @@
 test-basic.js
 test-versioning.js
 sampleDB.js
-data.dbx
-data.dbx.tmp
+data.smriti
+data.smriti.tmp
 CLAUDE.md
 .env
 *.log

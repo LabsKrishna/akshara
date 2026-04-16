@@ -1,15 +1,15 @@
-// remote.js — HTTP client for a running Database X server
+// remote.js — HTTP client for a running Smriti server
 // Mirrors the lib API surface so you can swap in-process ↔ remote by changing one line.
 "use strict";
 
 /**
- * Connect to a Database X HTTP server.
+ * Connect to a Smriti HTTP server.
  * @param {string} baseUrl — default: "http://localhost:3000"
  * @param {{ token?: string }} opts — optional auth token for Bearer authentication
  * @returns {object} client with the same method names as the core engine
  *
  * @example
- * const { connect } = require('dbx-memory/remote');
+ * const { connect } = require('smriti-db/remote');
  * const db = connect('http://localhost:3000');
  * await db.ingest('The meeting is at 3pm');
  * const results = await db.query('when is the meeting?');

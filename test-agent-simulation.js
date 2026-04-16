@@ -32,7 +32,7 @@ const INIT_OPTS = {
 };
 
 (async () => {
-  console.log("\n=== Database X Agent Simulation Test ===\n");
+  console.log("\n=== Smriti Agent Simulation Test ===\n");
   console.log("Simulating one long-running agent tracking a changing project budget.\n");
 
   await lib.init(INIT_OPTS);
@@ -223,4 +223,6 @@ const INIT_OPTS = {
   console.log("Helps long-running agent task completion     → ✅ Verified");
 
   console.log("\nAgent usability verdict: pass. Both raw API and agent helper provide durable, time-aware memory with full provenance.");
+
+  await lib.shutdown();
 })();

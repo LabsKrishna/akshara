@@ -1,13 +1,13 @@
-# Database X
+# Smriti
 
 > Your AI agent forgot what it knew yesterday. That's not a bug — your database just doesn't care about time.
 
-**Vector databases store embeddings. Database X remembers.**
+**Vector databases store embeddings. Smriti remembers.**
 
-Your agent stores a fact. Updates it. Then asks "what was true last week?" Your vector database returns nothing — the old embedding is gone. Database X returns the right answer, with a full version trail showing when and why it changed.
+Your agent stores a fact. Updates it. Then asks "what was true last week?" Your vector database returns nothing — the old embedding is gone. Smriti returns the right answer, with a full version trail showing when and why it changed.
 
 ```bash
-npm install dbx-memory
+npm install smriti-db
 ```
 
 ---
@@ -15,7 +15,7 @@ npm install dbx-memory
 ## See it work — 30 seconds, no API key
 
 ```bash
-npx dbx-memory demo
+npx smriti-db demo
 ```
 
 Runs a live agent memory demo in your terminal. Zero config. Nothing written to disk.
@@ -25,10 +25,10 @@ Runs a live agent memory demo in your terminal. Zero config. Nothing written to 
 ## Quick start
 
 ```js
-const dbx = require('dbx-memory');
+const smriti = require('smriti-db');
 
 async function main() {
-  await dbx.init({
+  await smriti.init({
     // Bring your own embedder — any function that returns a number[]
     embedFn: async (text) => {
       const res = await fetch('https://api.openai.com/v1/embeddings', {
@@ -43,7 +43,7 @@ async function main() {
     },
   });
 
-  const agent = dbx.createAgent({ name: 'analyst' });
+  const agent = smriti.createAgent({ name: 'analyst' });
 
   // Store a fact
   const id = await agent.remember('Revenue target is $10M for Q3');
@@ -68,7 +68,7 @@ async function main() {
   // Spot contradictions
   const { contradictions } = await agent.getContradictions(id);
 
-  await dbx.shutdown();
+  await smriti.shutdown();
 }
 
 main();
@@ -78,7 +78,7 @@ main();
 
 ## Why not just use a vector database?
 
-|  | Vector DB | Database X |
+|  | Vector DB | Smriti |
 |---|---|---|
 | **Updates** | Overwrite or duplicate | Automatic versioning |
 | **History** | None | Full version trail with deltas |
@@ -91,12 +91,37 @@ main();
 
 ---
 
+## Benchmarks
+
+All numbers from `npm run bench` — deterministic bag-of-words embedder, no API key needed. Reproducible on any machine.
+
+| Metric | Score | What it measures |
+|--------|-------|-----------------|
+| **Recall@5** | 75% (finance), 50% (engineering) | Fraction of relevant items in top-5 results |
+| **Precision@3** | 100% (health) | Fraction of top-3 results that are relevant |
+| **MRR** | 1.0 | First relevant result appears at rank 1 |
+| **Temporal accuracy** | 100% | `asOf` time-travel returns correct historical version |
+| **Contradiction detection** | 100% | Value changes flagged across all scenarios |
+| **Cross-session recall** | 100% | Agent B finds Agent A's memories |
+| **Noise separation** | 3/5 finance in top-5 | Relevant entities ranked above unrelated noise |
+
+**Constitution Goal Scorecard: 10/10 goals, 53/53 assertions passing (100%)**
+
+These numbers use a bag-of-words embedder (no neural model). With OpenAI `text-embedding-3-small` or Cohere embeddings, expect recall@5 > 90%. See `bench/agent-memory/bench-eval-real.js` for a variant that uses real embeddings.
+
+```bash
+npm run bench          # full suite (53 tests, ~300ms)
+npm run bench:real     # real embeddings (requires OPENAI_API_KEY)
+```
+
+---
+
 ## Agent API
 
 `createAgent()` is the recommended interface. It wraps the core engine with agent identity, default classification, default tags, and a clean `remember / recall / update` surface.
 
 ```js
-const agent = dbx.createAgent({
+const agent = smriti.createAgent({
   name: 'budget-planner',
   defaultClassification: 'confidential',
   defaultTags: ['finance'],
@@ -122,6 +147,39 @@ const { contradictions } = await agent.getContradictions(id);
 | `agent.getHistory(id)` | Full version history with provenance trail |
 | `agent.getContradictions(id)` | Versions flagged as contradictory |
 
+### Agent memory workflow — token-budgeted context
+
+Feed Smriti memories into your agent's prompt with a token budget. This is the recommended integration pattern for production agents:
+
+```js
+const smriti = require('smriti-db');
+
+await smriti.init({ embedFn: myEmbedder });
+const agent = smriti.createAgent({ name: 'assistant' });
+
+// Store facts over time
+await agent.remember('User prefers dark mode');
+await agent.remember('Last deployment was v2.3.1 on March 15');
+
+// At inference time: retrieve within a token budget
+const { results, tokenUsage } = await agent.recall('user preferences', {
+  maxTokens: 2000,
+});
+const context = results.map(r => r.text).join('\n');
+// → Feed `context` into your agent prompt
+
+console.log(tokenUsage);
+// → { budget: 2000, used: 847, resultsDropped: 0 }
+```
+
+For agent boot (no query needed — just the most important memories):
+
+```js
+const { items } = await agent.boot({ maxTokens: 1000, depth: 'essential' });
+const bootContext = items.map(i => i.text).join('\n');
+// → Prepend to system prompt for session continuity
+```
+
 ---
 
 ## Core capabilities
@@ -135,7 +193,7 @@ Every update creates a version, never an overwrite. Each version records the new
 Pass `asOf` (Unix ms) to any query. Entities that didn't exist yet are skipped. Each entity is scored against the version that was current at that time.
 
 ```js
-const results = await dbx.query('raw material cost', {
+const results = await smriti.query('raw material cost', {
   asOf: new Date('2026-01-15').getTime(),
 });
 ```
@@ -149,7 +207,7 @@ When a version contradicts a previous one (e.g. a price changes from $200 to $25
 Every entity tracks `source` (who created it) and `classification` (how sensitive it is). Query results include both so downstream systems can make trust decisions.
 
 ```js
-await dbx.ingest('Customer requested a refund', {
+await smriti.ingest('Customer requested a refund', {
   source: { type: 'tool', uri: 'support-ticket-1234' },
   classification: 'confidential',
   tags: ['support', 'billing'],
@@ -167,7 +225,7 @@ await dbx.ingest('Customer requested a refund', {
 Tag entities with `memoryType` (`"short-term"`, `"long-term"`, `"working"`) and `workspaceId` for tenant isolation. Both are filterable in queries.
 
 ```js
-await dbx.remember('Meeting notes from standup', {
+await smriti.remember('Meeting notes from standup', {
   memoryType: 'short-term',
   workspaceId: 'team-alpha',
 });
@@ -181,14 +239,22 @@ Queries combine multiple signals into a final score:
 - **Graph boost** — related entities via automatically discovered links
 - **Keyword boost** — exact term overlap
 - **LLM keyword boost** — when `useLLM` enrichment is enabled
+- **Importance boost** — explicit `importance` (0-1), LLM-derived, or auto-heuristic from version count + connectivity + contradictions
 - **Recency boost** — configurable half-life, disabled in `asOf` mode
+
+Set importance explicitly to prioritize critical memories in tight token budgets:
+
+```js
+await agent.remember('API key rotation policy: every 90 days', { importance: 0.9 });
+await agent.remember('Office wifi password is "guest123"', { importance: 0.2 });
+```
 
 ### Error signals
 
 Structured errors that agents can subscribe to for adaptive behavior:
 
 ```js
-dbx.onSignal('ERR_EMBEDDING_FAILED', (err) => {
+smriti.onSignal('ERR_EMBEDDING_FAILED', (err) => {
   console.warn(err.message, '—', err.suggestion);
 });
 ```
@@ -198,7 +264,7 @@ dbx.onSignal('ERR_EMBEDDING_FAILED', (err) => {
 Pass `llmFn` to `init()` for optional metadata extraction on ingest. When `useLLM: true` is set, the LLM extracts keywords, context, semantic tags, and importance scores. Off by default. Failures are non-blocking.
 
 ```js
-await dbx.init({
+await smriti.init({
   embedFn: myEmbedder,
   llmFn: async (text, type) => ({
     keywords: ['budget', 'Q2'],
@@ -208,7 +274,7 @@ await dbx.init({
   }),
 });
 
-await dbx.remember('Q2 budget is 2.4M', { useLLM: true });
+await smriti.remember('Q2 budget is 2.4M', { useLLM: true });
 ```
 
 ---
@@ -218,53 +284,53 @@ await dbx.remember('Q2 budget is 2.4M', { useLLM: true });
 ### Lifecycle
 
 ```js
-await dbx.init({ embedFn, llmFn?, embeddingDim?, dataFile?, ...overrides })
-await dbx.shutdown()
+await smriti.init({ embedFn, llmFn?, embeddingDim?, dataFile?, ...overrides })
+await smriti.shutdown()
 ```
 
 ### Write
 
 ```js
-await dbx.remember(text, opts?)
-await dbx.ingest(text, opts?)
-await dbx.ingestBatch(items)
-await dbx.ingestFile(filePath, opts?)
-await dbx.ingestTimeSeries(label, points, opts?)
+await smriti.remember(text, opts?)
+await smriti.ingest(text, opts?)
+await smriti.ingestBatch(items)
+await smriti.ingestFile(filePath, opts?)
+await smriti.ingestTimeSeries(label, points, opts?)
 ```
 
-Options: `{ type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM }`
+Options: `{ type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM, importance }`
 
 ### Read
 
 ```js
-await dbx.query(text, { limit?, filter?, asOf? })
-await dbx.get(id)
-await dbx.getMany(ids)
-await dbx.getHistory(id)
-await dbx.listEntities({ page?, limit?, type?, since?, until?, tags?, memoryType?, workspaceId? })
-await dbx.getGraph()
-await dbx.traverse(id, depth?)
-await dbx.getStatus()
+await smriti.query(text, { limit?, filter?, asOf? })
+await smriti.get(id)
+await smriti.getMany(ids)
+await smriti.getHistory(id)
+await smriti.listEntities({ page?, limit?, type?, since?, until?, tags?, memoryType?, workspaceId? })
+await smriti.getGraph()
+await smriti.traverse(id, depth?)
+await smriti.getStatus()
 ```
 
 ### Delete
 
 ```js
-await dbx.remove(id, { deletedBy? })    // soft delete
-await dbx.purge(id)                      // permanent hard delete
+await smriti.remove(id, { deletedBy? })    // soft delete
+await smriti.purge(id)                      // permanent hard delete
 ```
 
 ### Agent
 
 ```js
-const agent = dbx.createAgent({ name, defaultClassification?, defaultTags?, useLLM? })
+const agent = smriti.createAgent({ name, defaultClassification?, defaultTags?, useLLM? })
 ```
 
 ### Signals
 
 ```js
-dbx.onSignal(code, callback)
-dbx.getSignals(code?)
+smriti.onSignal(code, callback)
+smriti.getSignals(code?)
 ```
 
 ---
@@ -272,7 +338,7 @@ dbx.getSignals(code?)
 ## HTTP server
 
 ```bash
-npx dbx-memory          # starts on localhost:3000
+npx smriti-db          # starts on localhost:3000
 ```
 
 ### Core endpoints
@@ -312,23 +378,24 @@ npx dbx-memory          # starts on localhost:3000
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DBX_LINK_THRESHOLD` | `0.72` | Similarity threshold for graph linking |
-| `DBX_VERSION_THRESHOLD` | `0.82` | Similarity threshold for version detection |
-| `DBX_GRAPH_BOOST` | `0.01` | Graph relationship boost weight |
-| `DBX_LLM_BOOST` | `0.08` | LLM keyword boost weight |
-| `DBX_RECENCY_WEIGHT` | `0.10` | Recency boost weight |
-| `DBX_RECENCY_HALFLIFE_DAYS` | `30` | Recency half-life in days |
-| `DBX_MIN_SCORE` | `0.45` | Minimum final score for results |
-| `DBX_MIN_SEMANTIC` | `0.35` | Minimum semantic similarity |
-| `DBX_MAX_VERSIONS` | `0` | Max versions per entity (0 = unlimited) |
-| `DBX_STRICT_EMBEDDINGS` | `1` | Require embedder (`0` to disable) |
-| `DBX_PORT` | `3000` | HTTP server port |
+| `SMRITI_LINK_THRESHOLD` | `0.72` | Similarity threshold for graph linking |
+| `SMRITI_VERSION_THRESHOLD` | `0.82` | Similarity threshold for version detection |
+| `SMRITI_GRAPH_BOOST` | `0.01` | Graph relationship boost weight |
+| `SMRITI_LLM_BOOST` | `0.08` | LLM keyword boost weight |
+| `SMRITI_IMPORTANCE_WEIGHT` | `0.05` | Importance boost weight in query scoring |
+| `SMRITI_RECENCY_WEIGHT` | `0.10` | Recency boost weight |
+| `SMRITI_RECENCY_HALFLIFE_DAYS` | `30` | Recency half-life in days |
+| `SMRITI_MIN_SCORE` | `0.45` | Minimum final score for results |
+| `SMRITI_MIN_SEMANTIC` | `0.35` | Minimum semantic similarity |
+| `SMRITI_MAX_VERSIONS` | `0` | Max versions per entity (0 = unlimited) |
+| `SMRITI_STRICT_EMBEDDINGS` | `1` | Require embedder (`0` to disable) |
+| `SMRITI_PORT` | `3000` | HTTP server port |
 
 ---
 
 ## Storage
 
-- Persisted locally to `data.dbx` (configurable via `dataFile`)
+- Persisted locally to `data.smriti` (configurable via `dataFile`)
 - Atomic writes to reduce corruption risk
 - Pass `dataFile: ":memory:"` for in-memory-only mode
 
@@ -336,7 +403,7 @@ npx dbx-memory          # starts on localhost:3000
 
 ## Feedback
 
-We'd love to hear how you're using Database X — what works, what's missing, what you'd build on top of it.
+We'd love to hear how you're using Smriti — what works, what's missing, what you'd build on top of it.
 
 Reach us at **main@krishnalabs.ai**
 
