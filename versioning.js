@@ -1,4 +1,4 @@
-// versioning.js — Intelligent Delta Engine for Smriti
+// versioning.js — Intelligent Delta Engine for Akshara
 
 const { cosine } = require("./kernel");
 

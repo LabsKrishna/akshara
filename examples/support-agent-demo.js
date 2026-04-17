@@ -4,7 +4,7 @@
 "use strict";
 
 const path = require("path");
-const smriti = require(path.resolve(__dirname, "..", "index"));
+const akshara = require(path.resolve(__dirname, "..", "index"));
 
 const EMBED_DIM = 256;
 const DAY = 86_400_000;
@@ -53,7 +53,7 @@ function showResult(label, result) {
 }
 
 async function main() {
-  await smriti.init({
+  await akshara.init({
     dataFile: ":memory:",
     embedFn: async (text) => supportEmbed(text),
     embeddingDim: EMBED_DIM,
@@ -64,7 +64,7 @@ async function main() {
     minSemanticScore: 0.05,
   });
 
-  const agent = smriti.createAgent({
+  const agent = akshara.createAgent({
     name: "support-agent",
     defaultClassification: "confidential",
     defaultTags: ["support", "refund-policy"],
@@ -130,7 +130,7 @@ async function main() {
   }
 
   line("7. Show provenance and governance fields");
-  const entity = await smriti.get(policyId);
+  const entity = await akshara.get(policyId);
   console.log(JSON.stringify({
     id: entity.id,
     source: entity.source,
@@ -142,18 +142,18 @@ async function main() {
   }, null, 2));
 
   line("8. Export markdown for human review");
-  const markdown = await smriti.exportMarkdown({
+  const markdown = await akshara.exportMarkdown({
     filter: { workspaceId: "support-prod" },
     includeHistory: true,
   });
   console.log(markdown.split("\n").slice(0, 28).join("\n"));
   console.log("...");
 
-  await smriti.shutdown();
+  await akshara.shutdown();
 }
 
 main().catch(async (err) => {
   console.error("Support-agent demo failed:", err.message || err);
-  try { await smriti.shutdown(); } catch {}
+  try { await akshara.shutdown(); } catch {}
   process.exit(1);
 });

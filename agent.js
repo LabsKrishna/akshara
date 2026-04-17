@@ -1,19 +1,19 @@
-// agent.js — Lightweight agent helper for Smriti
+// agent.js — Lightweight agent helper for Akshara
 // A thin, opinionated wrapper that gives agents a clean, high-level interface
 // for durable memory. Completely optional — the raw API works just as well.
 "use strict";
 
 /**
- * Create an AgentMemory instance backed by a Smriti engine.
+ * Create an AgentMemory instance backed by a Akshara engine.
  *
  * @param {object} engine — the core lib (index.js exports) or a remote client
  * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
  * @returns {AgentMemory}
  *
  * @example
- * const smriti = require("smriti-db");
- * await smriti.init({ ... });
- * const agent = smriti.createAgent({ name: "budget-planner" });
+ * const akshara = require("akshara");
+ * await akshara.init({ ... });
+ * const agent = akshara.createAgent({ name: "budget-planner" });
  * await agent.remember("Q2 budget is 2.4M");
  * await agent.update("Q2 budget is now 2.7M");
  * const results = await agent.recall("Q2 budget");
@@ -157,7 +157,7 @@ class AgentMemory {
    */
   async promote(id, opts = {}) {
     if (typeof this._engine.annotate !== "function") {
-      throw new Error("Engine does not support annotate(). Upgrade smriti-db.");
+      throw new Error("Engine does not support annotate(). Upgrade akshara.");
     }
     return this._engine.annotate(id, {
       memoryType: "long-term",
@@ -220,7 +220,7 @@ class AgentMemory {
     if (typeof this._engine.getDrift === "function") {
       return this._engine.getDrift(id);
     }
-    throw new Error("Engine does not support getDrift(). Upgrade smriti-db.");
+    throw new Error("Engine does not support getDrift(). Upgrade akshara.");
   }
 
   /**
@@ -231,7 +231,7 @@ class AgentMemory {
    */
   async annotate(id, opts = {}) {
     if (typeof this._engine.annotate !== "function") {
-      throw new Error("Engine does not support annotate(). Upgrade smriti-db.");
+      throw new Error("Engine does not support annotate(). Upgrade akshara.");
     }
     return this._engine.annotate(id, {
       ...opts,

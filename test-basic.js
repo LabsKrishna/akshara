@@ -1,4 +1,4 @@
-// test-basic.js — Smriti foundation tests
+// test-basic.js — Akshara foundation tests
 // Run: node test-basic.js
 "use strict";
 
@@ -54,21 +54,21 @@ const INIT_OPTS = {
   await test("ingest() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.ingest("test"),
-      /smriti\.init\(\)/i
+      /akshara\.init\(\)/i
     );
   });
 
   await test("query() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.query("test"),
-      /smriti\.init\(\)/i
+      /akshara\.init\(\)/i
     );
   });
 
   await test("get() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.get(1),
-      /smriti\.init\(\)/i
+      /akshara\.init\(\)/i
     );
   });
 

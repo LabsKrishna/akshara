@@ -36,7 +36,7 @@ class FileStore {
       try {
         rows.push(JSON.parse(line));
       } catch {
-        console.warn(`[smriti] FileStore: skipping malformed line: ${line.slice(0, 80)}`);
+        console.warn(`[akshara] FileStore: skipping malformed line: ${line.slice(0, 80)}`);
       }
     }
     return rows; // caller normalizes and calls store.set()

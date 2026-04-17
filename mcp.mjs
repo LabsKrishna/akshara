@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp.mjs — ESM entry point for the Smriti MCP Server.
+// mcp.mjs — ESM entry point for the Akshara MCP Server.
 // Delegates to mcp.js (CJS) so the full implementation lives in one place.
 
 import { createRequire } from "module";

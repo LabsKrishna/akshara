@@ -3,7 +3,7 @@ TEMP_CHANGELOG.md
 node_modules/
 .DS_Store
 *.log
-data.smriti
-data.smriti.tmp
+data.akshara
+data.akshara.tmp
 data.dbx
 data.dbx.tmp

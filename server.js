@@ -1,4 +1,4 @@
-// server.js — Smriti HTTP Server
+// server.js — Akshara HTTP Server
 "use strict";
 
 const express = require("express");
@@ -20,10 +20,10 @@ app.use((req, res, next) => {
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // Simple in-memory sliding-window limiter (per IP, single process).
-// Set SMRITI_RATE_LIMIT=0 to disable.
+// Set AKSHARA_RATE_LIMIT=0 to disable.
 
-const _RATE_LIMIT  = Number(process.env.SMRITI_RATE_LIMIT  ?? 120); // requests/window
-const _RATE_WINDOW = Number(process.env.SMRITI_RATE_WINDOW ?? 60_000); // ms (default 1 min)
+const _RATE_LIMIT  = Number(process.env.AKSHARA_RATE_LIMIT  ?? 120); // requests/window
+const _RATE_WINDOW = Number(process.env.AKSHARA_RATE_WINDOW ?? 60_000); // ms (default 1 min)
 
 if (_RATE_LIMIT > 0) {
   const _buckets = new Map(); // ip → { count, resetAt }
@@ -59,7 +59,7 @@ if (_RATE_LIMIT > 0) {
 
 // ─── Input validation helpers ─────────────────────────────────────────────────
 
-const _MAX_TEXT_LEN = Number(process.env.SMRITI_MAX_TEXT_LEN ?? 50_000); // 50 KB
+const _MAX_TEXT_LEN = Number(process.env.AKSHARA_MAX_TEXT_LEN ?? 50_000); // 50 KB
 
 function _validateText(text) {
   if (!text || typeof text !== "string") return "text must be a non-empty string";
@@ -498,9 +498,9 @@ app.get("/auth/audit", _wrap(async (req) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 lib.init().then(() => {
-  const PORT = Number(process.env.SMRITI_PORT) || 3000;
+  const PORT = Number(process.env.AKSHARA_PORT) || 3000;
   const server = app.listen(PORT, () => {
-    console.log(`Smriti running on http://localhost:${PORT}`);
+    console.log(`Akshara running on http://localhost:${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}/`);
     console.log("Endpoints:");
     console.log("  POST   /ingest                  { text, type?, metadata?, tags?, timestamp?, source?, classification?, retention?, memoryType?, workspaceId?, useLLM? }");
@@ -535,7 +535,7 @@ lib.init().then(() => {
 
   // Graceful shutdown on SIGTERM / SIGINT
   const stop = async (signal) => {
-    console.log(`\n[smriti] ${signal} received — shutting down…`);
+    console.log(`\n[akshara] ${signal} received — shutting down…`);
     server.close(async () => {
       await lib.shutdown();
       process.exit(0);

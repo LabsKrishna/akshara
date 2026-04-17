@@ -1,4 +1,4 @@
-// errors.js — Error → Signal → Learning Loop for Smriti
+// errors.js — Error → Signal → Learning Loop for Akshara
 //
 // Every error is a signal. Signals carry structure. Structure enables learning.
 // Agents subscribe to signals and adapt behavior based on error patterns.
@@ -6,7 +6,7 @@
 
 // ─── Typed Error ─────────────────────────────────────────────────────────────
 
-class SmritiError extends Error {
+class AksharaError extends Error {
   /**
    * @param {string} code       — machine-readable error code (e.g. "ERR_PERSIST_FAILED")
    * @param {string} message    — human-readable detail
@@ -17,7 +17,7 @@ class SmritiError extends Error {
    */
   constructor(code, message, { recoverable = false, suggestion, context } = {}) {
     super(message);
-    this.name = "SmritiError";
+    this.name = "AksharaError";
     this.code = code;
     this.recoverable = recoverable;
     this.suggestion = suggestion || null;
@@ -111,7 +111,7 @@ function resetSignals() {
 // ─── Signal Emitters (used by engine internals) ──────────────────────────────
 
 function emitError(err) {
-  if (err instanceof SmritiError) {
+  if (err instanceof AksharaError) {
     _emit(err.toJSON());
   } else {
     _emit({
@@ -130,70 +130,70 @@ function emitError(err) {
 
 const Err = {
   notInitialized: () =>
-    new SmritiError(Codes.NOT_INITIALIZED, "Smriti not initialized. Call await smriti.init() first.", {
+    new AksharaError(Codes.NOT_INITIALIZED, "Akshara not initialized. Call await akshara.init() first.", {
       recoverable: true,
       suggestion: "Call init() before any operation.",
     }),
 
   notFound: (id) =>
-    new SmritiError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
+    new AksharaError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
       recoverable: false,
       context: { entityId: id },
     }),
 
   alreadyDeleted: (id) =>
-    new SmritiError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
+    new AksharaError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
       recoverable: false,
       context: { entityId: id },
       suggestion: "Use purge() for permanent removal, or get() to inspect the soft-deleted entity.",
     }),
 
   embeddingFailed: (detail) =>
-    new SmritiError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
+    new AksharaError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check your embedFn configuration or retry.",
     }),
 
   persistFailed: (detail, cause) =>
-    new SmritiError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
+    new AksharaError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check disk space and file permissions.",
       context: { cause: cause?.code || cause?.message },
     }),
 
   loadFailed: (detail, line) =>
-    new SmritiError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
+    new AksharaError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
       recoverable: true,
       suggestion: "Inspect the data file for corruption. The malformed line was skipped.",
       context: { line },
     }),
 
   validation: (detail) =>
-    new SmritiError(Codes.VALIDATION, detail, {
+    new AksharaError(Codes.VALIDATION, detail, {
       recoverable: false,
       suggestion: "Check the input parameters.",
     }),
 
   workerFailed: (detail) =>
-    new SmritiError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
+    new AksharaError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
       recoverable: true,
       suggestion: "Query will retry on the main thread if workers fail.",
     }),
 
   authFailed: () =>
-    new SmritiError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
+    new AksharaError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
       recoverable: false,
       suggestion: "Include an Authorization: Bearer <token> header.",
     }),
 
   forbidden: (detail) =>
-    new SmritiError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
+    new AksharaError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
       recoverable: false,
       suggestion: "Check your workspace role. Required permission may be read, write, admin, or owner.",
     }),
 
   writeQueueFull: (depth, max) =>
-    new SmritiError(Codes.WRITE_QUEUE_FULL,
+    new AksharaError(Codes.WRITE_QUEUE_FULL,
       `Write queue is full (${depth}/${max} pending). Retry after a short delay.`, {
       recoverable: true,
       suggestion: "Reduce concurrent write rate or increase writeQueueMax in init().",
@@ -201,4 +201,4 @@ const Err = {
     }),
 };
 
-module.exports = { SmritiError, Codes, Err, emitError, onSignal, getSignals, resetSignals };
+module.exports = { AksharaError, Codes, Err, emitError, onSignal, getSignals, resetSignals };

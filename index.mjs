@@ -1,5 +1,5 @@
-// index.mjs — ESM wrapper for Smriti Core Engine
-// Enables `import smriti from "smriti-db"` in ESM environments (e.g. OpenClaw plugins).
+// index.mjs — ESM wrapper for Akshara Core Engine
+// Enables `import akshara from "akshara"` in ESM environments (e.g. OpenClaw plugins).
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);

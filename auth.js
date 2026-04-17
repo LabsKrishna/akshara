@@ -1,4 +1,4 @@
-// auth.js — Authentication & Workspace ACL for Smriti
+// auth.js — Authentication & Workspace ACL for Akshara
 //
 // Token-based auth with role-per-workspace ACL. When enabled, every HTTP
 // request must carry a Bearer token that resolves to a principal. Each

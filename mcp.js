@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// mcp.js — Smriti MCP Server
-// Exposes Smriti as an MCP tool server for Claude Code, Cursor, ChatGPT, and any MCP host.
+// mcp.js — Akshara MCP Server
+// Exposes Akshara as an MCP tool server for Claude Code, Cursor, ChatGPT, and any MCP host.
 // Transport: stdio (JSON-RPC 2.0 over stdin/stdout).
 //
 // Usage in claude_desktop_config.json or .claude/settings.json:
-//   { "mcpServers": { "smriti": { "command": "node", "args": ["/path/to/smriti-db/mcp.js"] } } }
+//   { "mcpServers": { "akshara": { "command": "node", "args": ["/path/to/akshara/mcp.js"] } } }
 //
 // Environment variables:
-//   SMRITI_DATA_FILE  — path to data file (default: ./data.smriti)
-//   SMRITI_MCP_NAME   — server name shown to host (default: "smriti-db")
+//   AKSHARA_DATA_FILE  — path to data file (default: ./data.akshara)
+//   AKSHARA_MCP_NAME   — server name shown to host (default: "akshara")
 "use strict";
 
 const { McpServer }            = require("@modelcontextprotocol/sdk/server/mcp.js");
@@ -59,7 +59,7 @@ function fail(err) {
 
 // ─── Server Setup ────────────────────────────────────────────────────────────
 
-const serverName = process.env.SMRITI_MCP_NAME || "smriti-db";
+const serverName = process.env.AKSHARA_MCP_NAME || "akshara";
 const server = new McpServer(
   { name: serverName, version: "1.0.0" },
   { capabilities: { tools: {} } },
@@ -68,9 +68,9 @@ const server = new McpServer(
 // ─── Tools ───────────────────────────────────────────────────────────────────
 // 14 tools covering the full agent memory lifecycle.
 
-// 1. smriti_remember — store or update a memory
+// 1. akshara_remember — store or update a memory
 server.tool(
-  "smriti_remember",
+  "akshara_remember",
   "Store a memory. If similar content already exists, it is updated in-place (version history preserved). Returns the stable entity ID.",
   {
     text:           z.string().describe("The memory content to store (max 5000 chars)"),
@@ -89,9 +89,9 @@ server.tool(
   },
 );
 
-// 2. smriti_recall — semantic search
+// 2. akshara_recall — semantic search
 server.tool(
-  "smriti_recall",
+  "akshara_recall",
   "Search memories by semantic similarity. Returns ranked results with scores, provenance, and version info. Supports time-travel via asOf and token-budgeted packing via maxTokens.",
   {
     text:      z.string().describe("Natural language search query"),
@@ -120,9 +120,9 @@ server.tool(
   },
 );
 
-// 3. smriti_get — fetch a single entity
+// 3. akshara_get — fetch a single entity
 server.tool(
-  "smriti_get",
+  "akshara_get",
   "Retrieve a specific memory by its stable ID. Returns full entity including metadata, tags, provenance, and version count.",
   {
     id: z.number().int().describe("Entity ID"),
@@ -135,9 +135,9 @@ server.tool(
   },
 );
 
-// 4. smriti_history — version trail
+// 4. akshara_history — version trail
 server.tool(
-  "smriti_history",
+  "akshara_history",
   "Get the full version history for a memory. Shows how it changed over time, including diffs, contradiction flags, and provenance per version.",
   {
     id: z.number().int().describe("Entity ID"),
@@ -150,10 +150,10 @@ server.tool(
   },
 );
 
-// 5. smriti_delete — soft-delete
+// 5. akshara_delete — soft-delete
 server.tool(
-  "smriti_delete",
-  "Soft-delete a memory. The entity is marked as deleted but retained for audit purposes. Use smriti_recall to verify it no longer appears in results.",
+  "akshara_delete",
+  "Soft-delete a memory. The entity is marked as deleted but retained for audit purposes. Use akshara_recall to verify it no longer appears in results.",
   {
     id:        z.number().int().describe("Entity ID to delete"),
     deletedBy: z.string().optional().describe("Actor name for audit trail"),
@@ -166,9 +166,9 @@ server.tool(
   },
 );
 
-// 6. smriti_status — database overview
+// 6. akshara_status — database overview
 server.tool(
-  "smriti_status",
+  "akshara_status",
   "Get an overview of the database: total entities, breakdowns by type/memoryType/workspace, and recent version activity.",
   {},
   async () => {
@@ -179,9 +179,9 @@ server.tool(
   },
 );
 
-// 7. smriti_list — paginated listing
+// 7. akshara_list — paginated listing
 server.tool(
-  "smriti_list",
+  "akshara_list",
   "List stored memories with pagination and optional filters. Returns entity summaries sorted by most recently updated.",
   {
     page:        z.number().int().min(1).optional().describe("Page number (default: 1)"),
@@ -201,9 +201,9 @@ server.tool(
   },
 );
 
-// 8. smriti_batch_store — store many at once
+// 8. akshara_batch_store — store many at once
 server.tool(
-  "smriti_batch_store",
+  "akshara_batch_store",
   "Store multiple memories in a single call. Deduplication and version detection apply to each item. Returns array of entity IDs.",
   {
     items: z.array(z.object({
@@ -223,9 +223,9 @@ server.tool(
   },
 );
 
-// 9. smriti_extract_facts — fact extraction
+// 9. akshara_extract_facts — fact extraction
 server.tool(
-  "smriti_extract_facts",
+  "akshara_extract_facts",
   "Extract discrete facts from raw text (e.g. meeting notes, paragraphs) and store each as a separate memory. Requires factExtractFn to be configured.",
   {
     text:        z.string().describe("Raw text to extract facts from"),
@@ -241,9 +241,9 @@ server.tool(
   },
 );
 
-// 10. smriti_graph — relationship graph
+// 10. akshara_graph — relationship graph
 server.tool(
-  "smriti_graph",
+  "akshara_graph",
   "Get the knowledge graph of relationships between memories. Returns nodes, edges, and breakdowns by type/workspace.",
   {},
   async () => {
@@ -254,9 +254,9 @@ server.tool(
   },
 );
 
-// 11. smriti_consolidate — deduplication
+// 11. akshara_consolidate — deduplication
 server.tool(
-  "smriti_consolidate",
+  "akshara_consolidate",
   "Merge duplicate or near-duplicate memories. Returns counts of consolidated, removed, and preserved entities.",
   {
     threshold: z.number().min(0).max(1).optional().describe("Similarity threshold for merging (default: 0.78). Higher = stricter"),
@@ -271,9 +271,9 @@ server.tool(
   },
 );
 
-// 13. smriti_startup_summary — progressive context loading
+// 13. akshara_startup_summary — progressive context loading
 server.tool(
-  "smriti_startup_summary",
+  "akshara_startup_summary",
   "Get the most critical memories in minimal tokens for agent boot. Ranks by importance, recency, connectivity, and update frequency — no search query needed. Call once at startup instead of scanning all memories.",
   {
     maxTokens: z.number().int().min(1).optional().describe("Token budget for the summary (default: 500). Controls how many memories fit in the response"),
@@ -297,9 +297,9 @@ server.tool(
   },
 );
 
-// 14. smriti_export — markdown export
+// 14. akshara_export — markdown export
 server.tool(
-  "smriti_export",
+  "akshara_export",
   "Export all memories as structured Markdown. Useful for backup, inspection, or sharing.",
   {
     type:           z.string().optional().describe("Filter by entity type"),
@@ -321,7 +321,7 @@ server.tool(
 async function main() {
   // Initialize DBX with bag-of-words fallback (works out of the box, no API key needed).
   // Users can override via environment or by wrapping this file.
-  const dataFile = process.env.SMRITI_DATA_FILE || path.join(process.cwd(), "data.smriti");
+  const dataFile = process.env.AKSHARA_DATA_FILE || path.join(process.cwd(), "data.akshara");
 
   await dbx.init({
     dataFile,
@@ -335,6 +335,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`smriti-mcp fatal: ${err.message}\n`);
+  process.stderr.write(`akshara-mcp fatal: ${err.message}\n`);
   process.exit(1);
 });

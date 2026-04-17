@@ -1,7 +1,7 @@
 // bench/agent-memory/bench-temporal-trust.js
 // Evaluation suite for: time-aware retrieval, version semantics, provenance, and trust signals.
 //
-// These benchmarks test the features that differentiate Smriti as an agent memory system:
+// These benchmarks test the features that differentiate Akshara as an agent memory system:
 //
 //   1. Temporal retrieval — getChangeSince, asOf accuracy
 //   2. Version semantics — contradiction detection (numeric + negation), getDrift

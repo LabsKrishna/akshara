@@ -1,9 +1,9 @@
 # CLAUDE.md - Product Direction and Engineering Constitution
 
 **Last Updated:** 2026-04-17  
-**Project:** Smriti
+**Project:** Akshara
 
-This file defines the product direction, engineering goals, and transformation path for Smriti. All major decisions should support this document.
+This file defines the product direction, engineering goals, and transformation path for Akshara. All major decisions should support this document.
 
 ## Change Recording Rule
 
@@ -11,13 +11,13 @@ Every meaningful repository change must be recorded in `TEMP_CHANGELOG.md` so hu
 
 ## 1. Product Goal
 
-Smriti is no longer just a lightweight semantic memory engine.
+Akshara is no longer just a lightweight semantic memory engine.
 
 The target product is:
 
 **A durable, private, time-aware memory system for long-running AI agents.**
 
-The goal is to make Smriti useful for teams building:
+The goal is to make Akshara useful for teams building:
 
 - AI agents with long-term memory
 - Enterprise copilots with private context
@@ -37,11 +37,11 @@ We are building toward a stronger position:
 
 The core story should be:
 
-**Smriti helps AI systems remember accurately over time.**
+**Akshara helps AI systems remember accurately over time.**
 
 ## 3. Target Outcomes
 
-To be compelling to advanced AI companies or serious product teams, Smriti should achieve these outcomes:
+To be compelling to advanced AI companies or serious product teams, Akshara should achieve these outcomes:
 
 ### Outcome A: Production-usable agent memory
 
@@ -71,7 +71,7 @@ To be compelling to advanced AI companies or serious product teams, Smriti shoul
 These are non-negotiable:
 
 1. **Simple by default**
-Smriti must remain readable, explicit, and easy to integrate.
+Akshara must remain readable, explicit, and easy to integrate.
 
 2. **Built for agents**
 The system should optimize for long-running agent workflows, not only developer demos.
@@ -109,7 +109,7 @@ Required improvements:
 
 Goals:
 
-- Make Smriti useful inside real agent loops
+- Make Akshara useful inside real agent loops
 - Support separation between short-term and long-term memory
 - Improve memory selection and storage decisions
 
@@ -138,7 +138,7 @@ Required improvements:
 
 ## 6. Regulatory and Compliance Requirements
 
-Smriti is not a compliance product by default, but it should be built so regulated teams can adopt it safely.
+Akshara is not a compliance product by default, but it should be built so regulated teams can adopt it safely.
 
 The relevant regulatory and compliance targets include:
 
@@ -191,7 +191,7 @@ These requirements should influence product design from the start.
 
 ### Product implication
 
-If Smriti targets enterprise agents, internal copilots, or regulated workflows, compliance cannot be treated as a later add-on.
+If Akshara targets enterprise agents, internal copilots, or regulated workflows, compliance cannot be treated as a later add-on.
 
 It must shape:
 
@@ -228,7 +228,7 @@ Avoid these traps:
 
 Use this framing consistently:
 
-**Smriti is a memory engine for long-running AI agents that need durable, private, and time-aware recall.**
+**Akshara is a memory engine for long-running AI agents that need durable, private, and time-aware recall.**
 
 Secondary framing:
 
@@ -277,7 +277,7 @@ In addition, the data model should be able to evolve toward:
 
 ## 12. Success Criteria
 
-We are moving in the right direction if Smriti can eventually demonstrate:
+We are moving in the right direction if Akshara can eventually demonstrate:
 
 - Better agent recall across sessions
 - Better answers about changing information over time
@@ -289,7 +289,7 @@ We are moving in the right direction if Smriti can eventually demonstrate:
 
 Before adding a feature, ask:
 
-1. Does this make Smriti better as an agent memory system?
+1. Does this make Akshara better as an agent memory system?
 2. Does this improve time-aware recall or change understanding?
 3. Does this strengthen privacy, trust, or auditability?
 4. Does this support enterprise or regulatory readiness?
@@ -299,9 +299,9 @@ If the answer is no to most of these, do not prioritize it.
 
 ## 14. Product Tiers
 
-Smriti is open-core. Two editions exist with a clear boundary in the codebase.
+Akshara is open-core. Two editions exist with a clear boundary in the codebase.
 
-### Free Edition (`main` branch — published to npm as `smriti-db`)
+### Free Edition (`main` branch — published to npm as `akshara`)
 
 The free edition is the complete, production-usable memory engine. It is the product we lead with publicly.
 
@@ -317,7 +317,7 @@ The free edition is the complete, production-usable memory engine. It is the pro
 | Rate limiting and input validation | yes |
 | All benchmarks and eval tooling | yes |
 | PostgreSQL / pgvector backing store | **no — Enterprise** |
-| `smriti migrate` (JSONL → PostgreSQL) | **no — Enterprise** |
+| `akshara migrate` (JSONL → PostgreSQL) | **no — Enterprise** |
 | `docker-compose.yml` with pgvector | **no — Enterprise** |
 | `sql/init.sql` schema | **no — Enterprise** |
 | Multi-tenant workspace isolation (production-grade) | **no — Enterprise** |
@@ -331,8 +331,8 @@ Enterprise-only files (must not be committed to `main`):
 - `store/pg-store.js` — PgStore adapter (PostgreSQL + pgvector, hot-cache)
 - `sql/init.sql` — reference schema with IVFFlat ANN index
 - `docker-compose.yml` — self-hosted pgvector stack
-- `bin/cli.js` → full `smriti migrate` implementation
-- `index.js` → `SMRITI_STORE=pg` routing to PgStore
+- `bin/cli.js` → full `akshara migrate` implementation
+- `index.js` → `AKSHARA_STORE=pg` routing to PgStore
 - `package.json` → `pg` optional dependency, `start:pg` / `migrate` scripts
 
 Future enterprise-only additions (do not ship in free):

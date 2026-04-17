@@ -1,5 +1,5 @@
 {
-  "name": "smriti-db",
+  "name": "akshara",
   "version": "1.2.1",
   "description": "Durable, private, time-aware memory engine for long-running AI agents",
   "main": "./index.js",
@@ -26,8 +26,8 @@
     }
   },
   "bin": {
-    "smriti": "bin/cli.js",
-    "smriti-mcp": "mcp.js"
+    "akshara": "bin/cli.js",
+    "akshara-mcp": "mcp.js"
   },
   "scripts": {
     "start": "node server.js",
@@ -73,12 +73,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LabsKrishna/smriti-db.git"
+    "url": "git+https://github.com/LabsKrishna/akshara.git"
   },
   "bugs": {
-    "url": "https://github.com/LabsKrishna/smriti-db/issues"
+    "url": "https://github.com/LabsKrishna/akshara/issues"
   },
-  "homepage": "https://github.com/LabsKrishna/smriti-db#readme",
+  "homepage": "https://github.com/LabsKrishna/akshara#readme",
   "type": "commonjs",
   "engines": {
     "node": ">=18.0.0"
