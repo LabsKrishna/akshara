@@ -261,8 +261,8 @@ async function init(overrides = {}) {
   const storeType = (overrides.store || process.env.AKSHARA_STORE || "file").toLowerCase();
   if (storeType === "pg") {
     throw new Error(
-      "[smriti] PostgreSQL/pgvector backing store is available in Smriti Enterprise.\n" +
-      "  See https://github.com/LabsKrishna/smriti-db#enterprise for more information."
+      "[akshara] PostgreSQL/pgvector backing store is available in Akshara Enterprise.\n" +
+      "  See https://github.com/LabsKrishna/akshara#enterprise for more information."
     );
   }
   const { FileStore } = require("./store/file-store");
