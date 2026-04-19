@@ -1,22 +1,22 @@
-# Akshara Support Agent Memory Pilot
+# Kalairos Support Agent Memory Pilot
 
 ## Positioning
 
-Akshara is an open-source memory engine for enterprise support agents that need private, auditable, time-aware recall across sessions.
+Kalairos is an open-source memory engine for enterprise support agents that need private, auditable, time-aware recall across sessions.
 
-Support agents fail when memory is stateless, overwritten, or impossible to audit. Akshara gives support agents durable local memory with version history, `asOf` recall, contradiction detection, provenance, classification, workspace isolation, MCP/HTTP integration, and token-budgeted recall.
+Support agents fail when memory is stateless, overwritten, or impossible to audit. Kalairos gives support agents durable local memory with version history, `asOf` recall, contradiction detection, provenance, classification, workspace isolation, MCP/HTTP integration, and token-budgeted recall.
 
 Customer-facing one-liner:
 
-> Akshara gives enterprise support agents durable, private, time-aware memory: what the agent knows now, what it knew before, who changed it, and why.
+> Kalairos gives enterprise support agents durable, private, time-aware memory: what the agent knows now, what it knew before, who changed it, and why.
 
 Why now:
 
-> Enterprises are moving from chatbots to long-running agents, but their memory layer still behaves like search. Akshara makes memory versioned, inspectable, and safe to operate locally.
+> Enterprises are moving from chatbots to long-running agents, but their memory layer still behaves like search. Kalairos makes memory versioned, inspectable, and safe to operate locally.
 
 Credible beta language:
 
-> Akshara is a credible beta for enterprise agent teams. It is local-first and governance-oriented today, with paid implementation support for teams evaluating production support-agent workflows. It is not yet a SOC 2, HIPAA, HA, managed-cloud, or fully compliant enterprise database.
+> Kalairos is a credible beta for enterprise agent teams. It is local-first and governance-oriented today, with paid implementation support for teams evaluating production support-agent workflows. It is not yet a SOC 2, HIPAA, HA, managed-cloud, or fully compliant enterprise database.
 
 ## Buyer And Use Case
 
@@ -52,7 +52,7 @@ Disqualifiers:
 
 Your support agent should not forget policy changes, customer history, or prior resolutions. And when something changes, it should be able to explain what changed, when, and from which source.
 
-Akshara is a local-first memory engine for long-running support agents. It stores facts as versioned memories, not disposable embeddings, so your agent can answer:
+Kalairos is a local-first memory engine for long-running support agents. It stores facts as versioned memories, not disposable embeddings, so your agent can answer:
 
 - What is the current refund policy?
 - What was the policy before last week's change?
@@ -69,7 +69,7 @@ Built for enterprise evaluation:
 - MCP and HTTP interfaces for agent toolchains.
 - Markdown export for human inspection and handoff.
 
-Akshara is currently offered as an open-source core plus paid implementation and support for enterprise support-agent pilots.
+Kalairos is currently offered as an open-source core plus paid implementation and support for enterprise support-agent pilots.
 
 ## Six-slide Pitch Deck
 
@@ -95,9 +95,9 @@ Talk track:
 - They do not naturally show version trails or contradiction signals.
 - They do not decide what memory belongs in a constrained agent prompt.
 
-### Slide 3 - Akshara: versioned memory for support agents
+### Slide 3 - Kalairos: versioned memory for support agents
 
-Akshara stores support facts as stable, versioned memories. When a policy or customer fact changes, Akshara updates the same entity and preserves the historical trail.
+Kalairos stores support facts as stable, versioned memories. When a policy or customer fact changes, Kalairos updates the same entity and preserves the historical trail.
 
 Talk track:
 
@@ -109,7 +109,7 @@ Talk track:
 
 ### Slide 4 - Enterprise-friendly evaluation path
 
-Akshara is local-first, model-agnostic, and built to fit into existing agent workflows.
+Kalairos is local-first, model-agnostic, and built to fit into existing agent workflows.
 
 Talk track:
 
@@ -125,7 +125,7 @@ The pilot is a paid 2-4 week implementation and evaluation package.
 
 Deliverables:
 
-- Local Akshara deployment.
+- Local Kalairos deployment.
 - One support-agent memory workflow.
 - Integration with one support knowledge source or a mocked dataset.
 - Evaluation report and handoff documentation.
@@ -154,7 +154,7 @@ Use `node examples/support-agent-demo.js` for the repeatable local demo.
 
 Demo story:
 
-1. Initialize Akshara in memory with a deterministic local embedder.
+1. Initialize Kalairos in memory with a deterministic local embedder.
 2. Create a support agent named `support-agent`.
 3. Store refund policy v1.
 4. Update to refund policy v2.
@@ -183,11 +183,11 @@ Message:
 
 Hi {{first_name}},
 
-I am building Akshara, an open-source memory engine for enterprise support agents that need private, auditable recall across sessions.
+I am building Kalairos, an open-source memory engine for enterprise support agents that need private, auditable recall across sessions.
 
 The specific problem we focus on: support agents often retrieve similar context, but they cannot reliably answer what changed, what used to be true, or where a remembered fact came from.
 
-Akshara stores support facts as versioned memories, so an agent can recall the current policy, ask what was true before a change, and show a provenance trail for review.
+Kalairos stores support facts as versioned memories, so an agent can recall the current policy, ask what was true before a change, and show a provenance trail for review.
 
 We are running a small number of paid 2-4 week support-agent memory pilots for teams building internal copilots or support automation. The pilot is local-first and implementation-supported, not a SaaS migration.
 
@@ -221,7 +221,7 @@ Commercial model:
 
 Pilot deliverables:
 
-- Local Akshara setup.
+- Local Kalairos setup.
 - One support-agent memory workflow.
 - One support knowledge source integration or mocked dataset.
 - Demo covering current recall, historical recall, version history, provenance, and markdown export.
@@ -233,7 +233,7 @@ Success criteria:
 - The agent returns historical policy or customer facts with `asOf`.
 - The agent shows version history and provenance for changed memories.
 - The team can export memory records for human review.
-- The customer can identify whether Akshara should move into a deeper production evaluation.
+- The customer can identify whether Kalairos should move into a deeper production evaluation.
 
 Do not promise yet:
 
@@ -249,7 +249,7 @@ Do not promise yet:
 
 ### Is this a vector database?
 
-No. Akshara uses embeddings for retrieval, but the product is a memory engine. It treats stable identity, version history, time-aware recall, provenance, and agent context selection as first-class features.
+No. Kalairos uses embeddings for retrieval, but the product is a memory engine. It treats stable identity, version history, time-aware recall, provenance, and agent context selection as first-class features.
 
 ### Why would we pay if the core is open source?
 
@@ -257,11 +257,11 @@ The first paid offer is implementation and support, not a closed software licens
 
 ### Is this production ready?
 
-Use credible-beta language. Akshara is ready for serious enterprise evaluation and local pilots. It is not yet a fully compliant enterprise database with formal certifications, HA operations, or managed cloud guarantees.
+Use credible-beta language. Kalairos is ready for serious enterprise evaluation and local pilots. It is not yet a fully compliant enterprise database with formal certifications, HA operations, or managed cloud guarantees.
 
 ### Does it replace our vector database?
 
-Not necessarily. For the pilot, position Akshara as the memory layer for facts that change over time and need auditability. It can complement existing RAG or vector search systems.
+Not necessarily. For the pilot, position Kalairos as the memory layer for facts that change over time and need auditability. It can complement existing RAG or vector search systems.
 
 ### What is the fastest pilot?
 

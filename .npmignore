@@ -1,8 +1,8 @@
 test-basic.js
 test-versioning.js
 sampleDB.js
-data.akshara
-data.akshara.tmp
+data.kalairos
+data.kalairos.tmp
 CLAUDE.md
 .env
 *.log

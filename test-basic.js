@@ -1,4 +1,4 @@
-// test-basic.js — Akshara foundation tests
+// test-basic.js — Kalairos foundation tests
 // Run: node test-basic.js
 "use strict";
 
@@ -54,21 +54,21 @@ const INIT_OPTS = {
   await test("ingest() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.ingest("test"),
-      /akshara\.init\(\)/i
+      /kalairos\.init\(\)/i
     );
   });
 
   await test("query() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.query("test"),
-      /akshara\.init\(\)/i
+      /kalairos\.init\(\)/i
     );
   });
 
   await test("get() throws if init() not called", async () => {
     await assert.rejects(
       () => lib.get(1),
-      /akshara\.init\(\)/i
+      /kalairos\.init\(\)/i
     );
   });
 

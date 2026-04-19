@@ -1,4 +1,4 @@
-// versioning.js — Intelligent Delta Engine for Akshara
+// versioning.js — Intelligent Delta Engine for Kalairos
 
 const { cosine } = require("./kernel");
 

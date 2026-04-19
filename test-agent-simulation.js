@@ -32,7 +32,7 @@ const INIT_OPTS = {
 };
 
 (async () => {
-  console.log("\n=== Akshara Agent Simulation Test ===\n");
+  console.log("\n=== Kalairos Agent Simulation Test ===\n");
   console.log("Simulating one long-running agent tracking a changing project budget.\n");
 
   await lib.init(INIT_OPTS);

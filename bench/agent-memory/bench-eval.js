@@ -1,6 +1,6 @@
 // bench/agent-memory/bench-eval.js — Memory evaluation benchmarks
 // Measures recall@k, precision@k, MRR, temporal accuracy, and token-budget efficiency.
-// These are the numbers that differentiate Akshara from generic vector stores.
+// These are the numbers that differentiate Kalairos from generic vector stores.
 "use strict";
 
 const assert = require("assert/strict");

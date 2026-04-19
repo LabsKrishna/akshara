@@ -1,4 +1,4 @@
-// index.js — Akshara Core Engine
+// index.js — Kalairos Core Engine
 "use strict";
 
 const os     = require("os");
@@ -30,27 +30,27 @@ function _defaultTrustScore(sourceType) {
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
-  linkThreshold:      Number(process.env.AKSHARA_LINK_THRESHOLD    || 0.72),
-  versionThreshold:   Number(process.env.AKSHARA_VERSION_THRESHOLD || 0.82),
-  graphBoostWeight:   Number(process.env.AKSHARA_GRAPH_BOOST       || 0.01),
+  linkThreshold:      Number(process.env.KALAIROS_LINK_THRESHOLD    || 0.72),
+  versionThreshold:   Number(process.env.KALAIROS_VERSION_THRESHOLD || 0.82),
+  graphBoostWeight:   Number(process.env.KALAIROS_GRAPH_BOOST       || 0.01),
   keywordBoostWeight: 0.05,
-  llmBoostWeight:     Number(process.env.AKSHARA_LLM_BOOST         || 0.08),
-  importanceWeight:   Number(process.env.AKSHARA_IMPORTANCE_WEIGHT || 0.05),
-  recencyWeight:      Number(process.env.AKSHARA_RECENCY_WEIGHT    || 0.10),
-  recencyHalfLifeMs:  Number(process.env.AKSHARA_RECENCY_HALFLIFE_DAYS || 30) * 86_400_000,
-  minFinalScore:      Number(process.env.AKSHARA_MIN_SCORE         || 0.45),
-  minSemanticScore:   Number(process.env.AKSHARA_MIN_SEMANTIC      || 0.35),
-  maxVersions:        Number(process.env.AKSHARA_MAX_VERSIONS      || 0), // 0 = unlimited
-  strictEmbeddings:   (process.env.AKSHARA_STRICT_EMBEDDINGS       || "1") !== "0",
-  dataFile:           path.join(process.cwd(), "data.akshara"),
+  llmBoostWeight:     Number(process.env.KALAIROS_LLM_BOOST         || 0.08),
+  importanceWeight:   Number(process.env.KALAIROS_IMPORTANCE_WEIGHT || 0.05),
+  recencyWeight:      Number(process.env.KALAIROS_RECENCY_WEIGHT    || 0.10),
+  recencyHalfLifeMs:  Number(process.env.KALAIROS_RECENCY_HALFLIFE_DAYS || 30) * 86_400_000,
+  minFinalScore:      Number(process.env.KALAIROS_MIN_SCORE         || 0.45),
+  minSemanticScore:   Number(process.env.KALAIROS_MIN_SEMANTIC      || 0.35),
+  maxVersions:        Number(process.env.KALAIROS_MAX_VERSIONS      || 0), // 0 = unlimited
+  strictEmbeddings:   (process.env.KALAIROS_STRICT_EMBEDDINGS       || "1") !== "0",
+  dataFile:           path.join(process.cwd(), "data.kalairos"),
   // embedFn(text, type) — inject your own: `async (text, type) => number[]`.
   // llmFn(text, type) — inject your own: `async (text, type) => { keywords, context, llmTags, importance?, suggestedType? }`.
   // factExtractFn(text, type) — inject your own: `async (text, type) => string[]` (array of discrete fact strings).
-  consolidationThreshold: Number(process.env.AKSHARA_CONSOLIDATION_THRESHOLD || 0.78),
+  consolidationThreshold: Number(process.env.KALAIROS_CONSOLIDATION_THRESHOLD || 0.78),
   // Maximum number of mutations that may be pending in the write queue at once.
   // Excess writes are rejected with ERR_WRITE_QUEUE_FULL (HTTP 429) so callers
   // get a clear backpressure signal instead of unbounded memory growth.
-  writeQueueMax: Number(process.env.AKSHARA_WRITE_QUEUE_MAX || 500),
+  writeQueueMax: Number(process.env.KALAIROS_WRITE_QUEUE_MAX || 500),
 };
 
 // ─── Module state ─────────────────────────────────────────────────────────────
@@ -258,11 +258,11 @@ async function init(overrides = {}) {
   _draining      = false;  // drain state reset
 
   // ── Choose backing store ───────────────────────────────────────────────────
-  const storeType = (overrides.store || process.env.AKSHARA_STORE || "file").toLowerCase();
+  const storeType = (overrides.store || process.env.KALAIROS_STORE || "file").toLowerCase();
   if (storeType === "pg") {
     throw new Error(
-      "[akshara] PostgreSQL/pgvector backing store is available in Akshara Enterprise.\n" +
-      "  See https://github.com/LabsKrishna/akshara#enterprise for more information."
+      "[kalairos] PostgreSQL/pgvector backing store is available in Kalairos Enterprise.\n" +
+      "  See https://github.com/LabsKrishna/kalairos#enterprise for more information."
     );
   }
   const { FileStore } = require("./store/file-store");
@@ -332,7 +332,7 @@ function _normalizeRaw(raw) {
 }
 
 // Load raw rows from the backing store, normalise them, and populate the
-// in-memory hot-cache. Works for both sync (FileStore) and async (PgStore).
+// in-memory hot-cache. Works for both sync (FileStore) and async (KalairosStore).
 async function _loadStore() {
   const rawItems = await store.loadRaw(CFG);
   for (const raw of rawItems) {
@@ -341,10 +341,10 @@ async function _loadStore() {
       store.set(entity.id, entity);
     } catch (err) {
       emitError(Err.loadFailed(err.message, String(raw?.id || "").slice(0, 80)));
-      console.warn("[akshara] Skipping malformed entity during load");
+      console.warn("[kalairos] Skipping malformed entity during load");
     }
   }
-  console.log(`[akshara] Loaded ${store.size} entities`);
+  console.log(`[kalairos] Loaded ${store.size} entities`);
 }
 
 // Serialise entity for backing store I/O (links Set → Array).
@@ -360,12 +360,12 @@ function _persistAll() {
     if (result && typeof result.catch === "function") {
       result.catch(err => {
         emitError(Err.persistFailed(err.message, err));
-        console.error(`[akshara] PersistAll failed: ${err.message}`);
+        console.error(`[kalairos] PersistAll failed: ${err.message}`);
       });
     }
   } catch (err) {
     emitError(Err.persistFailed(err.message, err));
-    console.error(`[akshara] Persistence failed: ${err.message}`);
+    console.error(`[kalairos] Persistence failed: ${err.message}`);
   }
 }
 
@@ -377,12 +377,12 @@ function _appendEntity(entity) {
     if (result && typeof result.catch === "function") {
       result.catch(err => {
         emitError(Err.persistFailed(err.message, err));
-        console.error(`[akshara] AppendEntity failed: ${err.message}`);
+        console.error(`[kalairos] AppendEntity failed: ${err.message}`);
       });
     }
   } catch (err) {
     emitError(Err.persistFailed(err.message, err));
-    console.error(`[akshara] Append entity failed: ${err.message}`);
+    console.error(`[kalairos] Append entity failed: ${err.message}`);
   }
 }
 
@@ -455,7 +455,7 @@ async function _enrichWithLLM(text, type) {
       suggestedType: typeof raw.suggestedType === "string" ? raw.suggestedType.slice(0, 50) : null,
     };
   } catch (err) {
-    console.warn(`[akshara] LLM enrichment failed (non-blocking): ${err.message}`);
+    console.warn(`[kalairos] LLM enrichment failed (non-blocking): ${err.message}`);
     return null;
   }
 }
@@ -472,7 +472,7 @@ async function _extractFacts(text, type) {
     if (!Array.isArray(raw)) return [];
     return raw.map(String).filter(s => s.trim().length > 0).slice(0, 50);
   } catch (err) {
-    console.warn(`[akshara] Fact extraction failed (non-blocking): ${err.message}`);
+    console.warn(`[kalairos] Fact extraction failed (non-blocking): ${err.message}`);
     return [];
   }
 }
@@ -603,7 +603,7 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
       _persistAll();
       const flag = delta.contradicts ? " ⚠ CONTRADICTS prior version" : "";
       const verb = isConsolidation ? "Consolidated into" : "Updated";
-      console.log(`[akshara] ${verb} entity ${mergeTarget.id} → v${mergeTarget.versions.length} [${delta.type}]${flag} ${delta.summary}`);
+      console.log(`[kalairos] ${verb} entity ${mergeTarget.id} → v${mergeTarget.versions.length} [${delta.type}]${flag} ${delta.summary}`);
       return mergeTarget.id;
     }
 
@@ -637,7 +637,7 @@ async function ingest(text, { type = "text", timestamp, metadata = {}, tags = []
     store.set(id, entity);
     _relinkEntity(entity);
     _appendEntity(entity);
-    console.log(`[akshara] Created entity ${id} [${type}]`);
+    console.log(`[kalairos] Created entity ${id} [${type}]`);
     return id;
   });
 }
@@ -725,7 +725,7 @@ async function extractFacts(text, opts = {}) {
   }
   _persistAll();
 
-  console.log(`[akshara] Extracted ${facts.length} facts from raw text`);
+  console.log(`[kalairos] Extracted ${facts.length} facts from raw text`);
   return { facts, ids };
 }
 
@@ -998,12 +998,12 @@ async function query(text, { limit = 10, maxTokens = null, filter = {}, asOf = n
 
   if (Object.keys(merged).length) subset = _applyFilter(subset, merged);
 
-  console.time("[akshara] query");
+  console.time("[kalairos] query");
   const raw = await _runWorkers(queryVector, queryTerms, subset, {
     now:        asOf !== null ? asOf : Date.now(),
     useRecency: asOf === null,
   });
-  console.timeEnd("[akshara] query");
+  console.timeEnd("[kalairos] query");
 
   const sorted = raw
     .sort((a, b) => b.score - a.score)
@@ -1118,7 +1118,7 @@ async function remove(id, { deletedBy, allowedWorkspaces } = {}) {
     e.deletedBy = deletedBy ? _normalizeSource(deletedBy) : null;
 
     _persistAll();
-    console.log(`[akshara] Soft-deleted entity ${numId}`);
+    console.log(`[kalairos] Soft-deleted entity ${numId}`);
   });
 }
 
@@ -1141,7 +1141,7 @@ async function purge(id, { allowedWorkspaces } = {}) {
     _unlinkEntity(e, numId);
     store.delete(numId);
     _persistAll();
-    console.log(`[akshara] Purged entity ${numId} (permanent)`);
+    console.log(`[kalairos] Purged entity ${numId} (permanent)`);
   });
 }
 
@@ -1232,7 +1232,7 @@ async function consolidate({ threshold, dryRun = false, type, allowedWorkspaces 
     if (!dryRun && merged.length) _persistAll();
 
     const verb = dryRun ? "Would merge" : "Merged";
-    console.log(`[akshara] ${verb} ${merged.length} duplicate(s) across ${clusters.size} cluster(s)`);
+    console.log(`[kalairos] ${verb} ${merged.length} duplicate(s) across ${clusters.size} cluster(s)`);
     return { merged, totalMerged: merged.length };
   });
 }
@@ -1416,13 +1416,13 @@ async function getStatus({ allowedWorkspaces } = {}) {
 }
 
 // ─── Markdown Adapter ────────────────────────────────────────────────────────
-// Bridges the gap between agents that think in .md and Akshara's NDJSON persistence.
+// Bridges the gap between agents that think in .md and Kalairos's NDJSON persistence.
 // exportMarkdown() produces human-readable markdown from entities;
 // importMarkdown() parses it back and ingests each section.
 
 /**
  * Export entities as human-readable markdown.
- * Agents can read/write this format instead of touching .akshara directly.
+ * Agents can read/write this format instead of touching .kalairos directly.
  *
  * @param {{ filter?, includeHistory? }} opts
  * @returns {string} markdown string
@@ -1434,7 +1434,7 @@ async function exportMarkdown({ filter, includeHistory = false, allowedWorkspace
   if (filter && Object.keys(filter).length) entities = _applyFilter(entities, filter);
   entities.sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const lines = ["# Akshara — Memory Export", ""];
+  const lines = ["# Kalairos — Memory Export", ""];
   lines.push(`> Exported ${entities.length} entities at ${new Date().toISOString()}`, "");
 
   for (const e of entities) {
@@ -1476,7 +1476,7 @@ async function exportMarkdown({ filter, includeHistory = false, allowedWorkspace
 
 /**
  * Parse a markdown file (in the exportMarkdown format) and ingest each section.
- * This lets agents write memories as markdown and round-trip into Akshara.
+ * This lets agents write memories as markdown and round-trip into Kalairos.
  *
  * Also supports simple format: any line starting with "- " or "* " is treated
  * as a separate fact, making it easy for agents to just write bullet lists.
@@ -1529,7 +1529,7 @@ async function importMarkdown(mdText, defaults = {}) {
       _skipIO--;
     }
     _persistAll();
-    console.log(`[akshara] Imported ${ids.length} entities from structured markdown`);
+    console.log(`[kalairos] Imported ${ids.length} entities from structured markdown`);
     return { imported: ids.length, ids };
   }
 
@@ -1550,7 +1550,7 @@ async function importMarkdown(mdText, defaults = {}) {
     _skipIO--;
   }
   _persistAll();
-  console.log(`[akshara] Imported ${ids.length} entities from markdown bullets`);
+  console.log(`[kalairos] Imported ${ids.length} entities from markdown bullets`);
   return { imported: ids.length, ids };
 }
 
@@ -1674,7 +1674,7 @@ async function annotate(id, { trustScore, verified, notes, memoryType, allowedWo
     // updatedAt intentionally not changed — this is metadata, not a content update
 
     _persistAll();
-    console.log(`[akshara] Annotated entity ${numId} (trust=${e.trustScore?.toFixed(2)}, verified=${e.metadata?.verified ?? "–"})`);
+    console.log(`[kalairos] Annotated entity ${numId} (trust=${e.trustScore?.toFixed(2)}, verified=${e.metadata?.verified ?? "–"})`);
     return _serializeEntity(e);
   });
 }
@@ -1805,7 +1805,7 @@ async function shutdown() {
   if (_pool) { await _pool.stop(); _pool = null; }
   if (store?.shutdown) await store.shutdown();
   _initialized = false;
-  console.log("[akshara] Shutdown complete");
+  console.log("[kalairos] Shutdown complete");
 }
 
 // ─── Agent Helper ────────────────────────────────────────────────────────────

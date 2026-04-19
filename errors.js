@@ -1,4 +1,4 @@
-// errors.js — Error → Signal → Learning Loop for Akshara
+// errors.js — Error → Signal → Learning Loop for Kalairos
 //
 // Every error is a signal. Signals carry structure. Structure enables learning.
 // Agents subscribe to signals and adapt behavior based on error patterns.
@@ -6,7 +6,7 @@
 
 // ─── Typed Error ─────────────────────────────────────────────────────────────
 
-class AksharaError extends Error {
+class KalairosError extends Error {
   /**
    * @param {string} code       — machine-readable error code (e.g. "ERR_PERSIST_FAILED")
    * @param {string} message    — human-readable detail
@@ -17,7 +17,7 @@ class AksharaError extends Error {
    */
   constructor(code, message, { recoverable = false, suggestion, context } = {}) {
     super(message);
-    this.name = "AksharaError";
+    this.name = "KalairosError";
     this.code = code;
     this.recoverable = recoverable;
     this.suggestion = suggestion || null;
@@ -111,7 +111,7 @@ function resetSignals() {
 // ─── Signal Emitters (used by engine internals) ──────────────────────────────
 
 function emitError(err) {
-  if (err instanceof AksharaError) {
+  if (err instanceof KalairosError) {
     _emit(err.toJSON());
   } else {
     _emit({
@@ -130,70 +130,70 @@ function emitError(err) {
 
 const Err = {
   notInitialized: () =>
-    new AksharaError(Codes.NOT_INITIALIZED, "Akshara not initialized. Call await akshara.init() first.", {
+    new KalairosError(Codes.NOT_INITIALIZED, "Kalairos not initialized. Call await kalairos.init() first.", {
       recoverable: true,
       suggestion: "Call init() before any operation.",
     }),
 
   notFound: (id) =>
-    new AksharaError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
+    new KalairosError(Codes.ENTITY_NOT_FOUND, `Entity ${id} not found`, {
       recoverable: false,
       context: { entityId: id },
     }),
 
   alreadyDeleted: (id) =>
-    new AksharaError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
+    new KalairosError(Codes.ALREADY_DELETED, `Entity ${id} is already deleted`, {
       recoverable: false,
       context: { entityId: id },
       suggestion: "Use purge() for permanent removal, or get() to inspect the soft-deleted entity.",
     }),
 
   embeddingFailed: (detail) =>
-    new AksharaError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
+    new KalairosError(Codes.EMBEDDING_FAILED, `Embedding failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check your embedFn configuration or retry.",
     }),
 
   persistFailed: (detail, cause) =>
-    new AksharaError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
+    new KalairosError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check disk space and file permissions.",
       context: { cause: cause?.code || cause?.message },
     }),
 
   loadFailed: (detail, line) =>
-    new AksharaError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
+    new KalairosError(Codes.LOAD_FAILED, `Data load failed: ${detail}`, {
       recoverable: true,
       suggestion: "Inspect the data file for corruption. The malformed line was skipped.",
       context: { line },
     }),
 
   validation: (detail) =>
-    new AksharaError(Codes.VALIDATION, detail, {
+    new KalairosError(Codes.VALIDATION, detail, {
       recoverable: false,
       suggestion: "Check the input parameters.",
     }),
 
   workerFailed: (detail) =>
-    new AksharaError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
+    new KalairosError(Codes.WORKER_FAILED, `Worker scoring failed: ${detail}`, {
       recoverable: true,
       suggestion: "Query will retry on the main thread if workers fail.",
     }),
 
   authFailed: () =>
-    new AksharaError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
+    new KalairosError(Codes.AUTH_FAILED, "Authentication required. Provide a valid Bearer token.", {
       recoverable: false,
       suggestion: "Include an Authorization: Bearer <token> header.",
     }),
 
   forbidden: (detail) =>
-    new AksharaError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
+    new KalairosError(Codes.FORBIDDEN, detail || "You do not have permission for this operation.", {
       recoverable: false,
       suggestion: "Check your workspace role. Required permission may be read, write, admin, or owner.",
     }),
 
   writeQueueFull: (depth, max) =>
-    new AksharaError(Codes.WRITE_QUEUE_FULL,
+    new KalairosError(Codes.WRITE_QUEUE_FULL,
       `Write queue is full (${depth}/${max} pending). Retry after a short delay.`, {
       recoverable: true,
       suggestion: "Reduce concurrent write rate or increase writeQueueMax in init().",
@@ -201,4 +201,4 @@ const Err = {
     }),
 };
 
-module.exports = { AksharaError, Codes, Err, emitError, onSignal, getSignals, resetSignals };
+module.exports = { KalairosError, Codes, Err, emitError, onSignal, getSignals, resetSignals };

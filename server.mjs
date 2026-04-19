@@ -1,4 +1,4 @@
-// server.mjs — ESM wrapper for Akshara HTTP Server
+// server.mjs — ESM wrapper for Kalairos HTTP Server
 // Allows `import` of the server entry point in ESM environments.
 
 import { createRequire } from "module";

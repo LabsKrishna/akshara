@@ -1,13 +1,13 @@
-# Akshara
+# Kalairos
 
 > Your AI agent forgot what it knew yesterday. That's not a bug — your database just doesn't care about time.
 
-**Vector databases store embeddings. Akshara remembers.**
+**Vector databases store embeddings. Kalairos remembers.**
 
-Your agent stores a fact. Updates it. Then asks "what was true last week?" Your vector database returns nothing — the old embedding is gone. Akshara returns the right answer, with a full version trail showing when and why it changed.
+Your agent stores a fact. Updates it. Then asks "what was true last week?" Your vector database returns nothing — the old embedding is gone. Kalairos returns the right answer, with a full version trail showing when and why it changed.
 
 ```bash
-npm install akshara
+npm install kalairos
 ```
 
 ---
@@ -15,7 +15,7 @@ npm install akshara
 ## See it work — 30 seconds, no API key
 
 ```bash
-npx akshara demo
+npx kalairos demo
 ```
 
 Runs a live agent memory demo in your terminal. Zero config. Nothing written to disk.
@@ -25,10 +25,10 @@ Runs a live agent memory demo in your terminal. Zero config. Nothing written to 
 ## Quick start
 
 ```js
-const akshara = require('akshara');
+const kalairos = require('kalairos');
 
 async function main() {
-	await akshara.init({
+	await kalairos.init({
 		// Bring your own embedder — any function that returns a number[]
 		embedFn: async (text) => {
 			const res = await fetch('https://api.openai.com/v1/embeddings', {
@@ -43,7 +43,7 @@ async function main() {
 		},
 	});
 
-	const agent = akshara.createAgent({ name: 'analyst' });
+	const agent = kalairos.createAgent({ name: 'analyst' });
 
 	// Store a fact
 	const id = await agent.remember('Revenue target is $10M for Q3');
@@ -68,7 +68,7 @@ async function main() {
 	// Spot contradictions
 	const { contradictions } = await agent.getContradictions(id);
 
-	await akshara.shutdown();
+	await kalairos.shutdown();
 }
 
 main();
@@ -78,7 +78,7 @@ main();
 
 ## Why not just use a vector database?
 
-|                                | Vector DB              | Akshara                               |
+|                                | Vector DB              | Kalairos                               |
 | ------------------------------ | ---------------------- | ------------------------------------ |
 | **Updates**                    | Overwrite or duplicate | Automatic versioning                 |
 | **History**                    | None                   | Full version trail with deltas       |
@@ -121,7 +121,7 @@ npm run bench:real     # real embeddings (requires OPENAI_API_KEY)
 `createAgent()` is the recommended interface. It wraps the core engine with agent identity, default classification, default tags, and a clean `remember / recall / update` surface.
 
 ```js
-const agent = akshara.createAgent({
+const agent = kalairos.createAgent({
 	name: 'budget-planner',
 	defaultClassification: 'confidential',
 	defaultTags: ['finance'],
@@ -149,13 +149,13 @@ const { contradictions } = await agent.getContradictions(id);
 
 ### Agent memory workflow — token-budgeted context
 
-Feed Akshara memories into your agent's prompt with a token budget. This is the recommended integration pattern for production agents:
+Feed Kalairos memories into your agent's prompt with a token budget. This is the recommended integration pattern for production agents:
 
 ```js
-const akshara = require('akshara');
+const kalairos = require('kalairos');
 
-await akshara.init({ embedFn: myEmbedder });
-const agent = akshara.createAgent({ name: 'assistant' });
+await kalairos.init({ embedFn: myEmbedder });
+const agent = kalairos.createAgent({ name: 'assistant' });
 
 // Store facts over time
 await agent.remember('User prefers dark mode');
@@ -193,7 +193,7 @@ Every update creates a version, never an overwrite. Each version records the new
 Pass `asOf` (Unix ms) to any query. Entities that didn't exist yet are skipped. Each entity is scored against the version that was current at that time.
 
 ```js
-const results = await akshara.query('raw material cost', {
+const results = await kalairos.query('raw material cost', {
 	asOf: new Date('2026-01-15').getTime(),
 });
 ```
@@ -207,7 +207,7 @@ When a version contradicts a previous one (e.g. a price changes from $200 to $25
 Every entity tracks `source` (who created it) and `classification` (how sensitive it is). Query results include both so downstream systems can make trust decisions.
 
 ```js
-await akshara.ingest('Customer requested a refund', {
+await kalairos.ingest('Customer requested a refund', {
 	source: { type: 'tool', uri: 'support-ticket-1234' },
 	classification: 'confidential',
 	tags: ['support', 'billing'],
@@ -225,7 +225,7 @@ await akshara.ingest('Customer requested a refund', {
 Tag entities with `memoryType` (`"short-term"`, `"long-term"`, `"working"`) and `workspaceId` for tenant isolation. Both are filterable in queries.
 
 ```js
-await akshara.remember('Meeting notes from standup', {
+await kalairos.remember('Meeting notes from standup', {
 	memoryType: 'short-term',
 	workspaceId: 'team-alpha',
 });
@@ -256,7 +256,7 @@ await agent.remember('Office wifi password is "guest123"', { importance: 0.2 });
 Structured errors that agents can subscribe to for adaptive behavior:
 
 ```js
-akshara.onSignal('ERR_EMBEDDING_FAILED', (err) => {
+kalairos.onSignal('ERR_EMBEDDING_FAILED', (err) => {
 	console.warn(err.message, '—', err.suggestion);
 });
 ```
@@ -266,7 +266,7 @@ akshara.onSignal('ERR_EMBEDDING_FAILED', (err) => {
 Pass `llmFn` to `init()` for optional metadata extraction on ingest. When `useLLM: true` is set, the LLM extracts keywords, context, semantic tags, and importance scores. Off by default. Failures are non-blocking.
 
 ```js
-await akshara.init({
+await kalairos.init({
 	embedFn: myEmbedder,
 	llmFn: async (text, type) => ({
 		keywords: ['budget', 'Q2'],
@@ -276,7 +276,7 @@ await akshara.init({
 	}),
 });
 
-await akshara.remember('Q2 budget is 2.4M', { useLLM: true });
+await kalairos.remember('Q2 budget is 2.4M', { useLLM: true });
 ```
 
 ---
@@ -286,18 +286,18 @@ await akshara.remember('Q2 budget is 2.4M', { useLLM: true });
 ### Lifecycle
 
 ```js
-await akshara.init({ embedFn, llmFn?, embeddingDim?, dataFile?, ...overrides })
-await akshara.shutdown()
+await kalairos.init({ embedFn, llmFn?, embeddingDim?, dataFile?, ...overrides })
+await kalairos.shutdown()
 ```
 
 ### Write
 
 ```js
-await akshara.remember(text, opts?)
-await akshara.ingest(text, opts?)
-await akshara.ingestBatch(items)
-await akshara.ingestFile(filePath, opts?)
-await akshara.ingestTimeSeries(label, points, opts?)
+await kalairos.remember(text, opts?)
+await kalairos.ingest(text, opts?)
+await kalairos.ingestBatch(items)
+await kalairos.ingestFile(filePath, opts?)
+await kalairos.ingestTimeSeries(label, points, opts?)
 ```
 
 Options: `{ type, timestamp, metadata, tags, source, classification, retention, memoryType, workspaceId, useLLM, importance }`
@@ -305,34 +305,34 @@ Options: `{ type, timestamp, metadata, tags, source, classification, retention, 
 ### Read
 
 ```js
-await akshara.query(text, { limit?, filter?, asOf? })
-await akshara.get(id)
-await akshara.getMany(ids)
-await akshara.getHistory(id)
-await akshara.listEntities({ page?, limit?, type?, since?, until?, tags?, memoryType?, workspaceId? })
-await akshara.getGraph()
-await akshara.traverse(id, depth?)
-await akshara.getStatus()
+await kalairos.query(text, { limit?, filter?, asOf? })
+await kalairos.get(id)
+await kalairos.getMany(ids)
+await kalairos.getHistory(id)
+await kalairos.listEntities({ page?, limit?, type?, since?, until?, tags?, memoryType?, workspaceId? })
+await kalairos.getGraph()
+await kalairos.traverse(id, depth?)
+await kalairos.getStatus()
 ```
 
 ### Delete
 
 ```js
-await akshara.remove(id, { deletedBy? })    // soft delete
-await akshara.purge(id)                      // permanent hard delete
+await kalairos.remove(id, { deletedBy? })    // soft delete
+await kalairos.purge(id)                      // permanent hard delete
 ```
 
 ### Agent
 
 ```js
-const agent = akshara.createAgent({ name, defaultClassification?, defaultTags?, useLLM? })
+const agent = kalairos.createAgent({ name, defaultClassification?, defaultTags?, useLLM? })
 ```
 
 ### Signals
 
 ```js
-akshara.onSignal(code, callback)
-akshara.getSignals(code?)
+kalairos.onSignal(code, callback)
+kalairos.getSignals(code?)
 ```
 
 ---
@@ -340,7 +340,7 @@ akshara.getSignals(code?)
 ## HTTP server
 
 ```bash
-npx akshara          # starts on localhost:3000
+npx kalairos          # starts on localhost:3000
 ```
 
 ### Core endpoints
@@ -380,24 +380,24 @@ npx akshara          # starts on localhost:3000
 
 | Variable                       | Default | Description                                |
 | ------------------------------ | ------- | ------------------------------------------ |
-| `AKSHARA_LINK_THRESHOLD`        | `0.72`  | Similarity threshold for graph linking     |
-| `AKSHARA_VERSION_THRESHOLD`     | `0.82`  | Similarity threshold for version detection |
-| `AKSHARA_GRAPH_BOOST`           | `0.01`  | Graph relationship boost weight            |
-| `AKSHARA_LLM_BOOST`             | `0.08`  | LLM keyword boost weight                   |
-| `AKSHARA_IMPORTANCE_WEIGHT`     | `0.05`  | Importance boost weight in query scoring   |
-| `AKSHARA_RECENCY_WEIGHT`        | `0.10`  | Recency boost weight                       |
-| `AKSHARA_RECENCY_HALFLIFE_DAYS` | `30`    | Recency half-life in days                  |
-| `AKSHARA_MIN_SCORE`             | `0.45`  | Minimum final score for results            |
-| `AKSHARA_MIN_SEMANTIC`          | `0.35`  | Minimum semantic similarity                |
-| `AKSHARA_MAX_VERSIONS`          | `0`     | Max versions per entity (0 = unlimited)    |
-| `AKSHARA_STRICT_EMBEDDINGS`     | `1`     | Require embedder (`0` to disable)          |
-| `AKSHARA_PORT`                  | `3000`  | HTTP server port                           |
+| `KALAIROS_LINK_THRESHOLD`        | `0.72`  | Similarity threshold for graph linking     |
+| `KALAIROS_VERSION_THRESHOLD`     | `0.82`  | Similarity threshold for version detection |
+| `KALAIROS_GRAPH_BOOST`           | `0.01`  | Graph relationship boost weight            |
+| `KALAIROS_LLM_BOOST`             | `0.08`  | LLM keyword boost weight                   |
+| `KALAIROS_IMPORTANCE_WEIGHT`     | `0.05`  | Importance boost weight in query scoring   |
+| `KALAIROS_RECENCY_WEIGHT`        | `0.10`  | Recency boost weight                       |
+| `KALAIROS_RECENCY_HALFLIFE_DAYS` | `30`    | Recency half-life in days                  |
+| `KALAIROS_MIN_SCORE`             | `0.45`  | Minimum final score for results            |
+| `KALAIROS_MIN_SEMANTIC`          | `0.35`  | Minimum semantic similarity                |
+| `KALAIROS_MAX_VERSIONS`          | `0`     | Max versions per entity (0 = unlimited)    |
+| `KALAIROS_STRICT_EMBEDDINGS`     | `1`     | Require embedder (`0` to disable)          |
+| `KALAIROS_PORT`                  | `3000`  | HTTP server port                           |
 
 ---
 
 ## Storage
 
-- Persisted locally to `data.akshara` (configurable via `dataFile`)
+- Persisted locally to `data.kalairos` (configurable via `dataFile`)
 - Atomic writes to reduce corruption risk
 - Pass `dataFile: ":memory:"` for in-memory-only mode
 
@@ -405,7 +405,7 @@ npx akshara          # starts on localhost:3000
 
 ## Feedback
 
-We'd love to hear how you're using Akshara — what works, what's missing, what you'd build on top of it.
+We'd love to hear how you're using Kalairos — what works, what's missing, what you'd build on top of it.
 
 Reach us at **main@krishnalabs.ai**
 

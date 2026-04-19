@@ -1,5 +1,5 @@
 {
-  "name": "akshara",
+  "name": "kalairos",
   "version": "1.2.1",
   "description": "Durable, private, time-aware memory engine for long-running AI agents",
   "main": "./index.js",
@@ -26,8 +26,8 @@
     }
   },
   "bin": {
-    "akshara": "bin/cli.js",
-    "akshara-mcp": "mcp.js"
+    "kalairos": "bin/cli.js",
+    "kalairos-mcp": "mcp.js"
   },
   "scripts": {
     "start": "node server.js",
@@ -73,12 +73,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LabsKrishna/akshara.git"
+    "url": "git+https://github.com/LabsKrishna/kalairos.git"
   },
   "bugs": {
-    "url": "https://github.com/LabsKrishna/akshara/issues"
+    "url": "https://github.com/LabsKrishna/kalairos/issues"
   },
-  "homepage": "https://github.com/LabsKrishna/akshara#readme",
+  "homepage": "https://github.com/LabsKrishna/kalairos#readme",
   "type": "commonjs",
   "engines": {
     "node": ">=18.0.0"

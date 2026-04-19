@@ -1,5 +1,5 @@
-// remote.mjs — ESM wrapper for Akshara Remote Client
-// Enables `import { connect } from "akshara/remote"` in ESM environments.
+// remote.mjs — ESM wrapper for Kalairos Remote Client
+// Enables `import { connect } from "kalairos/remote"` in ESM environments.
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);

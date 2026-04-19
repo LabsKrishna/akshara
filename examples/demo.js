@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// examples/demo.js — Interactive Akshara demo
+// examples/demo.js — Interactive Kalairos demo
 // Runs a full agent memory scenario with a built-in embedder. No API key needed.
 "use strict";
 
@@ -54,7 +54,7 @@ const _origTime    = console.time;
 const _origTimeEnd = console.timeEnd;
 let _muteEngine = false;
 console.log = function (...args) {
-  if (_muteEngine && typeof args[0] === "string" && args[0].startsWith("[akshara]")) return;
+  if (_muteEngine && typeof args[0] === "string" && args[0].startsWith("[kalairos]")) return;
   _origLog.apply(console, args);
 };
 console.time    = function (...args) { if (!_muteEngine) _origTime.apply(console, args); };
@@ -65,7 +65,7 @@ console.timeEnd = function (...args) { if (!_muteEngine) _origTimeEnd.apply(cons
 async function main() {
   _origLog("");
   _origLog(bold("  ╔══════════════════════════════════════════════════╗"));
-  _origLog(bold("  ║          Akshara — Live Demo                       ║"));
+  _origLog(bold("  ║          Kalairos — Live Demo                       ║"));
   _origLog(bold("  ║          No API key. No config. In-memory.       ║"));
   _origLog(bold("  ╚══════════════════════════════════════════════════╝"));
   _origLog("");
@@ -186,8 +186,8 @@ async function main() {
   result(`Demo complete. ${bold(String(status.entities))} entities, ${bold(String(status.totalVersions))} versions, ${bold("0")} cloud calls.`);
   _origLog("");
   _origLog(`    ${bold("Get started:")}`);
-  _origLog(`      npm install akshara`);
-  _origLog(`      https://github.com/LabsKrishna/akshara`);
+  _origLog(`      npm install kalairos`);
+  _origLog(`      https://github.com/LabsKrishna/kalairos`);
   _origLog("");
 
   await dbx.shutdown();
