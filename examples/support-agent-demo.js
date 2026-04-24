@@ -64,10 +64,14 @@ async function main() {
     minSemanticScore: 0.05,
   });
 
-  const agent = kalairos.createAgent({
-    name: "support-agent",
-    defaultClassification: "confidential",
-    defaultTags: ["support", "refund-policy"],
+  // Scope prefills common provenance/classification/tags for this agent's writes.
+  // The flat API would also work; scope() just avoids repeating defaults on every call.
+  const support = kalairos.scope({
+    source: { type: "agent", actor: "support-agent" },
+    classification: "confidential",
+    tags: ["support", "refund-policy"],
+    workspaceId: "support-prod",
+    memoryType: "long-term",
   });
 
   const t1 = Date.UTC(2026, 0, 10, 9, 0, 0);
@@ -76,53 +80,48 @@ async function main() {
 
   line("1. Store support policy v1");
   const policyV1 = "Refund policy for premium customers: full refund allowed within 30 days when the order is unopened.";
-  const policyId = await agent.remember(policyV1, {
+  const policyId = await support.remember(policyV1, {
     timestamp: t1,
     source: { type: "tool", uri: "support-kb://refund-policy" },
-    workspaceId: "support-prod",
-    memoryType: "long-term",
     importance: 0.95,
   });
   console.log(`Stored policy memory id=${policyId}`);
 
   line("2. Update policy v2");
   const policyV2 = "Refund policy for premium customers: full refund allowed within 45 days when the order is unopened.";
-  const updatedPolicyId = await agent.remember(policyV2, {
+  const updatedPolicyId = await support.remember(policyV2, {
     timestamp: t2,
     source: { type: "user", actor: "support-ops-lead" },
-    workspaceId: "support-prod",
-    memoryType: "long-term",
     importance: 0.95,
   });
   console.log(`Updated same memory id=${updatedPolicyId}`);
 
   line("3. Store customer-specific support context");
-  await agent.remember("Customer Acme Robotics has premium support entitlement and prefers email follow-up after refunds.", {
+  await support.remember("Customer Acme Robotics has premium support entitlement and prefers email follow-up after refunds.", {
     timestamp: t2 + 1_000,
     source: { type: "tool", uri: "ticket://ACME-1042" },
-    workspaceId: "support-prod",
     tags: ["customer-acme", "entitlement"],
     importance: 0.8,
   });
   console.log("Stored customer context for Acme Robotics.");
 
-  line("4. Recall current policy");
-  const current = await agent.recall("premium customer refund policy unopened order", {
+  line("4. Query current policy");
+  const current = await support.query("premium customer refund policy unopened order", {
     limit: 3,
     filter: { workspaceId: "support-prod" },
   });
   showResult("Current answer", current);
 
-  line("5. Recall historical policy with asOf");
-  const historical = await agent.recall("premium customer refund policy unopened order", {
-    limit: 3,
-    asOf: beforePolicyChange,
-    filter: { workspaceId: "support-prod" },
-  });
+  line("5. Time-travel query with queryAt");
+  const historical = await support.queryAt(
+    "premium customer refund policy unopened order",
+    beforePolicyChange,
+    { limit: 3, filter: { workspaceId: "support-prod" } },
+  );
   showResult("Historical answer before policy change", historical);
 
   line("6. Show version history and delta");
-  const history = await agent.getHistory(policyId);
+  const history = await support.getHistory(policyId);
   for (const version of history.versions) {
     const date = new Date(version.timestamp).toISOString().slice(0, 10);
     const delta = version.delta ? ` | ${version.delta.summary}` : " | initial";

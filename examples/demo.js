@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// examples/demo.js — Interactive Kalairos demo
-// Runs a full agent memory scenario with a built-in embedder. No API key needed.
+// examples/demo.js — Interactive Kalairos demo (flat API).
+// Runs the three-layer walk-through with a built-in embedder. No API key needed.
 "use strict";
 
 const path = require("path");
-const dbx  = require(path.resolve(__dirname, "..", "index"));
+const kalairos = require(path.resolve(__dirname, "..", "index"));
 
 // ── ANSI helpers (zero dependencies) ────────────────────────────────────────
 
@@ -65,7 +65,7 @@ console.timeEnd = function (...args) { if (!_muteEngine) _origTimeEnd.apply(cons
 async function main() {
   _origLog("");
   _origLog(bold("  ╔══════════════════════════════════════════════════╗"));
-  _origLog(bold("  ║          Kalairos — Live Demo                       ║"));
+  _origLog(bold("  ║          Kalairos — Live Demo                    ║"));
   _origLog(bold("  ║          No API key. No config. In-memory.       ║"));
   _origLog(bold("  ╚══════════════════════════════════════════════════╝"));
   _origLog("");
@@ -73,10 +73,8 @@ async function main() {
   _muteEngine = true;
 
   // Lower thresholds for the bag-of-words demo embedder (production would use
-  // real embeddings with the defaults). These values make version detection,
-  // time-travel queries, and contradiction detection work reliably with the
-  // simple hash-based embedder above.
-  await dbx.init({
+  // real embeddings with the defaults).
+  await kalairos.init({
     embedFn:                async (text) => demoEmbed(text),
     embeddingDim:           EMBED_DIM,
     dataFile:               ":memory:",
@@ -87,52 +85,46 @@ async function main() {
     minFinalScore:          0.10,
     minSemanticScore:       0.08,
   });
+  result("Engine ready (in-memory, nothing written to disk)");
 
-  const agent = dbx.createAgent({ name: "analyst" });
-  result("Agent " + bold("analyst") + " ready (in-memory, nothing written to disk)");
+  // ── Layer 1: init, remember, query ─────────────────────────────────────────
 
-  // ── 1. Store and automatic versioning ──────────────────────────────────────
+  section(1, "Layer 1 — init, remember, query");
 
-  section(1, "Store facts — updates are automatic");
-
-  code('agent.remember("Revenue target is $10M for Q3")');
-  const id1 = await agent.remember("Revenue target is $10M for Q3");
+  code('kalairos.remember("Revenue target is $10M for Q3")');
+  const id1 = await kalairos.remember("Revenue target is $10M for Q3");
   result(`Stored as entity ${bold(String(id1))}`);
 
-  const t_before_update = Date.now();
+  const tBeforeUpdate = Date.now();
   await sleep(60);
 
-  code('agent.remember("Revenue target revised to $12M for Q3")');
-  await agent.remember("Revenue target revised to $12M for Q3");
+  code('kalairos.remember("Revenue target revised to $12M for Q3")');
+  await kalairos.remember("Revenue target revised to $12M for Q3");
   result(`Updated entity ${bold(String(id1))} ${dim("→ version 2")}`);
   note("Same entity detected automatically — no ID required.");
 
-  // ── 2. Time-travel ─────────────────────────────────────────────────────────
-
-  section(2, "Time-travel — what was true before?");
-
-  code('agent.recall("revenue target")');
-  const current = await agent.recall("revenue target");
+  code('kalairos.query("revenue target")');
+  const current = await kalairos.query("revenue target");
   if (current.results && current.results.length > 0) {
     result(`"${current.results[0].text}" ${dim("(current)")}`);
   } else {
     note("(no results — query similarity below threshold with demo embedder)");
   }
 
-  code('agent.recall("revenue target", { asOf: <before update> })');
-  const past = await agent.recall("revenue target", { asOf: t_before_update });
+  // ── Layer 2: time-aware memory ─────────────────────────────────────────────
+
+  section(2, "Layer 2 — Time-aware memory");
+
+  code('kalairos.queryAt("revenue target", <before update>)');
+  const past = await kalairos.queryAt("revenue target", tBeforeUpdate);
   if (past.results && past.results.length > 0) {
     result(`"${past.results[0].text}" ${dim("(what was true then)")}`);
   } else {
     note("(time-travel query — result depends on embedder similarity)");
   }
 
-  // ── 3. Version history with deltas ─────────────────────────────────────────
-
-  section(3, "Version history with change deltas");
-
-  code(`agent.getHistory(${id1})`);
-  const history = await agent.getHistory(id1);
+  code(`kalairos.getHistory(${id1})`);
+  const history = await kalairos.getHistory(id1);
   if (history && history.versions) {
     for (const v of history.versions) {
       const delta = v.delta ? dim(` — ${v.delta.summary}`) : "";
@@ -141,22 +133,22 @@ async function main() {
     }
   }
 
-  // ── 4. Contradiction detection ─────────────────────────────────────────────
+  // ── Layer 3: advanced maintenance ──────────────────────────────────────────
 
-  section(4, "Contradiction detection");
+  section(3, "Layer 3 — Contradiction detection");
 
-  code('agent.remember("The API rate limit is 1000 requests per minute")');
-  const id2 = await agent.remember("The API rate limit is 1000 requests per minute");
+  code('kalairos.remember("The API rate limit is 1000 requests per minute")');
+  const id2 = await kalairos.remember("The API rate limit is 1000 requests per minute");
   result(`Stored as entity ${bold(String(id2))}`);
 
   await sleep(30);
 
-  code('agent.remember("The API rate limit is 500 requests per minute")');
-  await agent.remember("The API rate limit is 500 requests per minute");
+  code('kalairos.remember("The API rate limit is 500 requests per minute")');
+  await kalairos.remember("The API rate limit is 500 requests per minute");
   result(`Updated entity ${bold(String(id2))} ${dim("→ version 2")}`);
 
-  code(`agent.getContradictions(${id2})`);
-  const { contradictions } = await agent.getContradictions(id2);
+  code(`kalairos.getContradictions(${id2})`);
+  const { contradictions } = await kalairos.getContradictions(id2);
   if (contradictions.length > 0) {
     result(`${yellow(contradictions.length + " contradiction(s)")} found across versions`);
     for (const c of contradictions) {
@@ -166,19 +158,9 @@ async function main() {
     result("No contradictions flagged (delta type depends on embedder precision)");
   }
 
-  // ── 5. Provenance ──────────────────────────────────────────────────────────
-
-  section(5, "Provenance — who stored what");
-
-  const entity = await dbx.get(id1);
-  result(`source:         ${cyan(JSON.stringify(entity.source))}`);
-  result(`classification: ${cyan('"' + entity.classification + '"')}`);
-  result(`versions:       ${cyan(String(entity.versionCount))}`);
-  result(`memoryType:     ${cyan('"' + entity.memoryType + '"')}`);
-
   // ── Summary ────────────────────────────────────────────────────────────────
 
-  const status = await dbx.getStatus();
+  const status = await kalairos.getStatus();
 
   _origLog("");
   _origLog(bold("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
@@ -190,7 +172,7 @@ async function main() {
   _origLog(`      https://github.com/LabsKrishna/kalairos`);
   _origLog("");
 
-  await dbx.shutdown();
+  await kalairos.shutdown();
   _muteEngine = false;
 }
 
