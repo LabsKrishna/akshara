@@ -2,6 +2,8 @@
 // Mirrors the lib API surface so you can swap in-process ↔ remote by changing one line.
 "use strict";
 
+let _createAgentWarned = false;
+
 /**
  * Connect to a Kalairos HTTP server.
  * @param {string} baseUrl — default: "http://localhost:3000"
@@ -84,13 +86,61 @@ function connect(baseUrl = "http://localhost:3000", { token } = {}) {
     importMarkdown:   (markdown, opts = {})           => post("/import/markdown", { markdown, ...opts }),
 
     /**
-     * Create a remote agent helper. Returns the same AgentMemory-like interface
-     * backed by the server's /agent/* endpoints.
+     * Create a bounded remote memory scope. Returns a handle whose methods use
+     * the flat-API vocabulary (`remember`, `query`, `queryAt`, `getHistory`,
+     * `getContradictions`) and forward to the server under the hood.
      *
-     * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
-     * @returns {Promise<object>} remote agent proxy
+     * @param {object} [opts]
+     * @param {{type:string, actor?:string, uri?:string}} [opts.source]
+     * @param {string}   [opts.classification]
+     * @param {string[]} [opts.tags]
+     * @param {string}   [opts.memoryType]
+     * @param {string}   [opts.workspaceId]
+     * @returns {Promise<object>} remote scope proxy
+     */
+    async scope(opts = {}) {
+      // Map flat-API opts to legacy /agent/create shape on the wire.
+      const name = opts.name || opts.source?.actor || "scope";
+      const payload = {
+        name,
+        defaultClassification: opts.classification || opts.defaultClassification,
+        defaultTags:           opts.tags || opts.defaultTags,
+        useLLM:                !!opts.useLLM,
+      };
+      const { agentId } = await post("/agent/create", payload);
+      const actor = name;
+      return {
+        name:             actor,
+        agentId,
+        // Canonical flat-API verbs
+        remember:         (text, o = {}) => post(`/agent/${agentId}/remember`, { text, ...o }),
+        query:            (text, o = {}) => post(`/agent/${agentId}/recall`, { text, ...o }),
+        queryAt:          (text, timestamp, o = {}) =>
+                            post(`/agent/${agentId}/recall`, { text, asOf: Number(timestamp), ...o }),
+        queryRange:       (text, since, until, o = {}) =>
+                            post(`/agent/${agentId}/recall`, { text, since, until, ...o }),
+        getHistory:       (entityId)     => get(`/agent/${agentId}/history/${entityId}`),
+        getContradictions:(entityId)     => get(`/agent/${agentId}/contradictions/${entityId}`),
+        extractFacts:     (text, o = {}) => post(`/agent/${agentId}/learn-from`, { text, ...o }),
+        // Deprecated aliases — preserved for back-compat with the old AgentMemory surface
+        update:           (text, o = {}) => post(`/agent/${agentId}/update`, { text, ...o }),
+        recall:           (text, o = {}) => post(`/agent/${agentId}/recall`, { text, ...o }),
+        learnFrom:        (text, o = {}) => post(`/agent/${agentId}/learn-from`, { text, ...o }),
+      };
+    },
+
+    /**
+     * @deprecated Use `client.scope({ source: { type: "agent", actor: name }, ... })` instead.
+     * Thin back-compat shim over the server's /agent/create endpoint.
      */
     async createAgent(opts) {
+      if (!_createAgentWarned) {
+        _createAgentWarned = true;
+        console.warn(
+          "[kalairos] remote createAgent() is deprecated and will be removed in 2.0. " +
+          "Use client.scope({ source: { type: 'agent', actor: name }, classification, tags })."
+        );
+      }
       const { agentId } = await post("/agent/create", opts);
       return {
         name: opts.name,

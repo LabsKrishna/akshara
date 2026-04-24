@@ -7,7 +7,7 @@ const path   = require("path");
 const { cosine } = require("./kernel");
 const { buildDelta, buildChangelog, measureDrift } = require("./versioning");
 const { WorkerPool } = require("./worker-pool");
-const { AgentMemory } = require("./agent");
+const { MemoryScope, AgentMemory } = require("./agent");
 const { Err, emitError, resetSignals } = require("./errors");
 const { AuthStore } = require("./auth");
 const { computeTrustSignals } = require("./trust");
@@ -1960,25 +1960,52 @@ async function shutdown() {
   console.log("[kalairos] Shutdown complete");
 }
 
-// ─── Agent Helper ────────────────────────────────────────────────────────────
+// ─── Scoped Memory Helper ────────────────────────────────────────────────────
 
 /**
- * Create a lightweight agent memory helper with built-in provenance,
- * classification defaults, and a clean recall/update interface.
+ * Create a bounded memory handle with prefilled provenance / classification / tags.
+ * Every write through the returned scope is stamped with these defaults; reads
+ * behave exactly like the flat API.
  *
- * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
- * @returns {AgentMemory}
+ * @param {object} [opts]
+ * @param {{type:string, actor?:string, uri?:string}} [opts.source]
+ * @param {string}   [opts.classification="internal"]
+ * @param {string[]} [opts.tags=[]]
+ * @param {string}   [opts.memoryType]
+ * @param {string}   [opts.workspaceId]
+ * @param {boolean}  [opts.useLLM=false]
+ * @returns {MemoryScope}
  *
  * @example
- * const agent = dbx.createAgent({ name: "budget-planner" });
- * await agent.remember("Q2 budget is 2.4M");
- * await agent.update("Q2 budget is now 2.7M");
- * const results = await agent.recall("Q2 budget");
- * const { contradictions } = await agent.getContradictions(id);
+ * const scope = kalairos.scope({
+ *   source: { type: "agent", actor: "budget-planner" },
+ *   classification: "confidential",
+ *   tags: ["finance"],
+ * });
+ * await scope.remember("Q2 budget is 2.4M");
+ * const { results } = await scope.query("Q2 budget");
  */
-function createAgent(opts) {
+function scope(opts = {}) {
   _assertInit();
-  return new AgentMemory(module.exports, opts);
+  return new MemoryScope(module.exports, opts);
+}
+
+let _createAgentWarned = false;
+/**
+ * @deprecated Use `kalairos.scope({ source: { type: "agent", actor: name }, ... })` instead.
+ * Kept as a thin back-compat alias for callers predating the `scope()` helper.
+ * Will be removed in 2.0.
+ */
+function createAgent(opts = {}) {
+  _assertInit();
+  if (!_createAgentWarned) {
+    _createAgentWarned = true;
+    console.warn(
+      "[kalairos] createAgent() is deprecated and will be removed in 2.0. " +
+      "Use kalairos.scope({ source: { type: 'agent', actor: name }, classification, tags })."
+    );
+  }
+  return new MemoryScope(module.exports, opts);
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
@@ -2016,6 +2043,7 @@ module.exports = {
   // Provenance & trust
   annotate,
   shutdown,
+  scope,
   createAgent,
   // Auth & Workspace ACL
   auth: _auth,

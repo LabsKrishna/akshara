@@ -28,6 +28,7 @@ export const {
   exportMarkdown,
   importMarkdown,
   shutdown,
+  scope,
   createAgent,
   auth,
   onSignal,

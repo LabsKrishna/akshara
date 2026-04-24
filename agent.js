@@ -1,163 +1,135 @@
-// agent.js — Lightweight agent helper for Kalairos
-// A thin, opinionated wrapper that gives agents a clean, high-level interface
-// for durable memory. Completely optional — the raw API works just as well.
+// agent.js — Scoped memory helper for Kalairos.
+//
+// `MemoryScope` is a thin, opinionated wrapper around the core engine that
+// pre-fills provenance, classification, and tags on every write, and exposes
+// the same vocabulary as the flat top-level API (`remember`, `query`, `queryAt`,
+// `getHistory`, `annotate`, `getContradictions`, `remove`).
+//
+// The legacy `AgentMemory` name and its `recall`/`update`/`forget` verbs are
+// kept as deprecated aliases so existing callers (including `createAgent()`)
+// continue to work unchanged.
 "use strict";
 
 /**
- * Create an AgentMemory instance backed by a Kalairos engine.
- *
- * @param {object} engine — the core lib (index.js exports) or a remote client
- * @param {{ name: string, defaultClassification?: string, defaultTags?: string[] }} opts
- * @returns {AgentMemory}
+ * Bounded memory handle with prefilled provenance / classification / tags.
  *
  * @example
  * const kalairos = require("kalairos");
- * await kalairos.init({ ... });
- * const agent = kalairos.createAgent({ name: "budget-planner" });
- * await agent.remember("Q2 budget is 2.4M");
- * await agent.update("Q2 budget is now 2.7M");
- * const results = await agent.recall("Q2 budget");
+ * await kalairos.init({ embedFn });
+ * const scope = kalairos.scope({
+ *   source: { type: "agent", actor: "budget-planner" },
+ *   classification: "confidential",
+ *   tags: ["finance"],
+ * });
+ * await scope.remember("Q2 budget is 2.4M");
+ * const { results } = await scope.query("Q2 budget");
  */
-class AgentMemory {
+class MemoryScope {
   /**
-   * @param {object} engine — object with remember/query/getHistory methods
+   * @param {object} engine — object with remember/query/getHistory/... methods
    * @param {object} opts
-   * @param {string} opts.name — agent identity (stored in provenance)
-   * @param {string} [opts.defaultClassification="internal"]
-   * @param {string[]} [opts.defaultTags=[]]
-   * @param {boolean} [opts.useLLM=false] — enable LLM enrichment by default for this agent
+   * @param {{type: string, actor?: string, uri?: string}} [opts.source]
+   *   Provenance stamped on every write originating from this scope.
+   * @param {string} [opts.classification="internal"] — default classification for writes.
+   * @param {string[]} [opts.tags=[]] — tags merged into every write.
+   * @param {string} [opts.memoryType] — optional default memoryType (e.g. "working").
+   * @param {string} [opts.workspaceId] — optional default workspaceId.
+   * @param {boolean} [opts.useLLM=false] — enable LLM enrichment by default.
+   *
+   * Back-compat: also accepts the legacy `{ name, defaultClassification, defaultTags }`
+   * shape used by `createAgent()`. `name` becomes `source: { type: "agent", actor: name }`.
    */
-  constructor(engine, { name, defaultClassification = "internal", defaultTags = [], useLLM = false }) {
-    if (!name) throw new Error("agent name is required");
+  constructor(engine, opts = {}) {
     if (!engine) throw new Error("engine is required");
+
+    // Legacy shape support: { name, defaultClassification, defaultTags }
+    const legacyName = opts.name;
+    const source = opts.source || (legacyName ? { type: "agent", actor: legacyName } : null);
+    const classification = opts.classification || opts.defaultClassification || "internal";
+    const tagsInput = opts.tags || opts.defaultTags || [];
+
     this._engine = engine;
-    this.name = name;
-    this.defaultClassification = defaultClassification;
-    this.defaultTags = Array.isArray(defaultTags) ? [...defaultTags] : [];
-    this.useLLM = !!useLLM;
+    this.source = source;
+    this.classification = classification;
+    this.tags = Array.isArray(tagsInput) ? [...tagsInput] : [];
+    this.memoryType = opts.memoryType || null;
+    this.workspaceId = opts.workspaceId || null;
+    this.useLLM = !!opts.useLLM;
+
+    // Legacy read accessor used by tests/benches: scope.name
+    if (legacyName) this.name = legacyName;
+    else if (source && source.actor) this.name = source.actor;
   }
 
-  /**
-   * Build the source object for this agent.
-   * @returns {{ type: "agent", actor: string }}
-   */
-  _source() {
-    return { type: "agent", actor: this.name };
-  }
-
-  /**
-   * Merge caller opts with agent defaults.
-   * @param {object} opts
-   * @returns {object}
-   */
+  /** @private */
   _mergeOpts(opts = {}) {
-    return {
-      ...opts,
-      source: opts.source || this._source(),
-      classification: opts.classification || this.defaultClassification,
-      tags: Array.from(new Set([...this.defaultTags, ...(opts.tags || [])])),
-      useLLM: opts.useLLM !== undefined ? opts.useLLM : this.useLLM,
-    };
+    const merged = { ...opts };
+    if (!merged.source && this.source) merged.source = this.source;
+    if (!merged.classification) merged.classification = this.classification;
+    const extraTags = Array.isArray(opts.tags) ? opts.tags : [];
+    merged.tags = Array.from(new Set([...this.tags, ...extraTags]));
+    if (!merged.memoryType && this.memoryType) merged.memoryType = this.memoryType;
+    if (!merged.workspaceId && this.workspaceId) merged.workspaceId = this.workspaceId;
+    if (merged.useLLM === undefined) merged.useLLM = this.useLLM;
+    return merged;
   }
 
+  // ─── Canonical (flat-API aligned) methods ──────────────────────────────────
+
   /**
-   * Store a new fact or update an existing one (version detection is automatic).
+   * Store or update a fact. Version detection is automatic — the engine decides
+   * whether this is a new entity or a new version of an existing one.
    * @param {string} text
-   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
-   * @returns {Promise<number>} stable entity ID
+   * @param {object} [opts]
+   * @returns {Promise<number>} stable entity id
    */
   async remember(text, opts = {}) {
-    const merged = this._mergeOpts(opts);
-    if (opts.allowedWorkspaces) merged.allowedWorkspaces = opts.allowedWorkspaces;
-    return this._engine.remember(text, merged);
+    return this._engine.remember(text, this._mergeOpts(opts));
   }
 
   /**
-   * Alias for remember() — makes intent explicit when updating a known fact.
+   * Retrieve memories relevant to `text` (current state).
    * @param {string} text
-   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
-   * @returns {Promise<number>} stable entity ID
+   * @param {object} [opts]
    */
-  async update(text, opts = {}) {
-    return this.remember(text, opts);
-  }
-
-  /**
-   * Recall memories matching a query (current state, no time travel).
-   * @param {string} text — natural language query
-   * @param {{ limit?, maxTokens?, filter?, allowedWorkspaces? }} [opts]
-   * @returns {Promise<{ count, results, filter, config }>}
-   */
-  async recall(text, opts = {}) {
+  async query(text, opts = {}) {
     return this._engine.query(text, opts);
   }
 
   /**
-   * Recall memory state as of a specific point in time.
-   * @param {string} text — natural language query
-   * @param {number} timestamp — Unix ms
-   * @param {{ limit?, maxTokens?, filter?, allowedWorkspaces? }} [opts]
+   * Time-travel query — state as we believed it at `timestamp` (Unix ms).
    */
-  async recallAt(text, timestamp, opts = {}) {
+  async queryAt(text, timestamp, opts = {}) {
     return this._engine.queryAt(text, timestamp, opts);
   }
 
   /**
-   * Recall memories whose version timeline overlaps `[since, until]`.
-   * @param {string} text — natural language query
-   * @param {number|null} since — Unix ms
-   * @param {number|null} until — Unix ms
-   * @param {{ limit?, maxTokens?, filter?, allowedWorkspaces? }} [opts]
+   * Range query — entities whose version timeline overlaps `[since, until]`.
    */
-  async recallRange(text, since, until, opts = {}) {
+  async queryRange(text, since, until, opts = {}) {
     return this._engine.queryRange(text, since, until, opts);
   }
 
   /**
-   * Get the full version history and provenance trail for an entity.
-   * @param {number} id — entity ID
-   * @returns {Promise<object>} history object with versions array
+   * Full version history and provenance trail for an entity.
    */
   async getHistory(id) {
     return this._engine.getHistory(id);
   }
 
   /**
-   * Extract discrete facts from raw text and ingest each as a separate memory.
-   * Requires factExtractFn to be configured via init().
-   * @param {string} text — raw text (meeting notes, paragraphs, etc.)
-   * @param {{ type?, timestamp?, metadata?, tags?, classification? }} [opts]
-   * @returns {Promise<{ facts: string[], ids: number[] }>}
+   * Annotate an entity (trust, verified, notes, memoryType) without creating
+   * a new content version.
    */
-  async learnFrom(text, opts = {}) {
-    const merged = this._mergeOpts(opts);
-    if (opts.allowedWorkspaces) merged.allowedWorkspaces = opts.allowedWorkspaces;
-    return this._engine.extractFacts(text, merged);
-  }
-
-  /**
-   * Boot the agent with a token-budgeted summary of the most critical memories.
-   * Call once at startup instead of searching the full store.
-   *
-   * @param {{ maxTokens?, maxItems?, depth?, filter? }} [opts]
-   *   - maxTokens:  token budget (default 500)
-   *   - maxItems:   hard cap on returned items
-   *   - depth:      "essential" | "standard" | "full"
-   *   - filter:     standard filter object (type, tags, memoryType, workspaceId)
-   * @returns {Promise<{ summary, items }>}
-   */
-  async boot(opts = {}) {
-    return this._engine.getStartupSummary({
-      ...opts,
-      allowedWorkspaces: opts.allowedWorkspaces,
-    });
+  async annotate(id, opts = {}) {
+    if (typeof this._engine.annotate !== "function") {
+      throw new Error("Engine does not support annotate(). Upgrade kalairos.");
+    }
+    return this._engine.annotate(id, { ...opts });
   }
 
   /**
    * Inspect contradictions across all versions of an entity.
-   * Returns an array of versions that have contradicts === true.
-   * @param {number} id — entity ID
-   * @returns {Promise<{ id, contradictions: object[] }>}
    */
   async getContradictions(id) {
     if (typeof this._engine.getContradictions === "function") {
@@ -169,105 +141,100 @@ class AgentMemory {
   }
 
   /**
-   * Promote a short-term or working memory to long-term memory.
-   * Does not create a new content version — only changes the memory tier.
-   *
-   * @param {number} id — entity ID to promote
-   * @param {{ allowedWorkspaces? }} [opts]
-   * @returns {Promise<object>} updated entity
+   * Soft-delete an entity with a stated reason. Use `purge()` on the core API
+   * for permanent GDPR-style erasure.
    */
-  async promote(id, opts = {}) {
-    if (typeof this._engine.annotate !== "function") {
-      throw new Error("Engine does not support annotate(). Upgrade kalairos.");
-    }
-    return this._engine.annotate(id, {
-      memoryType: "long-term",
-      allowedWorkspaces: opts.allowedWorkspaces,
-    });
-  }
-
-  /**
-   * Explicitly forget (soft-delete) an entity with a stated reason.
-   * The memory is removed from retrieval but kept for audit. Use purge() for GDPR erasure.
-   *
-   * @param {number} id — entity ID to forget
-   * @param {string} [reason] — why this memory is being discarded
-   * @param {{ allowedWorkspaces? }} [opts]
-   */
-  async forget(id, reason = "explicit forget", opts = {}) {
+  async remove(id, opts = {}) {
+    const reason = opts.reason || "scope remove";
+    const actor = (this.source && this.source.actor) || this.name || "scope";
     return this._engine.remove(id, {
-      deletedBy: { type: "agent", actor: this.name, reason },
+      deletedBy: opts.deletedBy || { type: "scope", actor, reason },
       allowedWorkspaces: opts.allowedWorkspaces,
     });
   }
 
   /**
-   * Consolidate short-term and working memories at the end of a session.
-   * Merges near-duplicates and returns a report of what was merged.
-   * Call this before shutting the agent down to keep long-term memory clean.
-   *
-   * @param {{ threshold?, dryRun? }} [opts]
-   * @returns {Promise<{ merged, totalMerged }>}
-   */
-  async consolidateSession(opts = {}) {
-    return this._engine.consolidate({
-      ...opts,
-      allowedWorkspaces: opts.allowedWorkspaces,
-    });
-  }
-
-  /**
-   * Get all entities currently in working memory for this agent's workspace.
-   * Useful for inspecting transient context before deciding what to promote or forget.
-   *
-   * @param {{ limit?, workspaceId? }} [opts]
-   * @returns {Promise<{ total, page, pages, entities }>}
-   */
-  async getWorkingMemory(opts = {}) {
-    return this._engine.listEntities({
-      memoryType: "working",
-      limit: opts.limit || 50,
-      workspaceId: opts.workspaceId,
-      allowedWorkspaces: opts.allowedWorkspaces,
-    });
-  }
-
-  /**
-   * Measure semantic drift of an entity — how much its meaning has changed over time.
-   * @param {number} id — entity ID
-   * @returns {Promise<{ id, versionCount, totalDrift, averageDrift, trend, steps }>}
+   * Measure semantic drift of an entity across its versions.
    */
   async getDrift(id) {
-    if (typeof this._engine.getDrift === "function") {
-      return this._engine.getDrift(id);
-    }
+    if (typeof this._engine.getDrift === "function") return this._engine.getDrift(id);
     throw new Error("Engine does not support getDrift(). Upgrade kalairos.");
   }
 
   /**
-   * Annotate an entity with trust signals without creating a new content version.
-   * @param {number} id
-   * @param {{ trustScore?, verified?, notes?, memoryType? }} opts
-   * @returns {Promise<object>} updated entity
+   * Extract discrete facts from raw text and ingest each as a separate memory.
+   * Requires `factExtractFn` configured via `init()`.
    */
-  async annotate(id, opts = {}) {
-    if (typeof this._engine.annotate !== "function") {
-      throw new Error("Engine does not support annotate(). Upgrade kalairos.");
-    }
-    return this._engine.annotate(id, {
-      ...opts,
-      allowedWorkspaces: opts.allowedWorkspaces,
-    });
+  async extractFacts(text, opts = {}) {
+    return this._engine.extractFacts(text, this._mergeOpts(opts));
   }
 
   /**
-   * Alias for boot() — returns a token-budgeted summary of the most important memories.
-   * @param {{ maxTokens?, depth?, filter? }} [opts]
-   * @returns {Promise<{ summary, items }>}
+   * Token-budgeted summary of the most critical memories for this scope.
    */
-  async summarize(opts = {}) {
-    return this.boot(opts);
+  async getStartupSummary(opts = {}) {
+    return this._engine.getStartupSummary({ ...opts });
+  }
+
+  /**
+   * Consolidate near-duplicate memories. Thin pass-through to `engine.consolidate()`.
+   */
+  async consolidate(opts = {}) {
+    return this._engine.consolidate({ ...opts });
+  }
+
+  // ─── Deprecated aliases (kept for back-compat with AgentMemory callers) ────
+
+  /** @deprecated use `remember()` */
+  async update(text, opts = {}) { return this.remember(text, opts); }
+
+  /** @deprecated use `query()` */
+  async recall(text, opts = {}) { return this.query(text, opts); }
+
+  /** @deprecated use `queryAt()` */
+  async recallAt(text, timestamp, opts = {}) { return this.queryAt(text, timestamp, opts); }
+
+  /** @deprecated use `queryRange()` */
+  async recallRange(text, since, until, opts = {}) { return this.queryRange(text, since, until, opts); }
+
+  /** @deprecated use `extractFacts()` */
+  async learnFrom(text, opts = {}) { return this.extractFacts(text, opts); }
+
+  /** @deprecated use `getStartupSummary()` */
+  async boot(opts = {}) { return this.getStartupSummary(opts); }
+
+  /** @deprecated use `getStartupSummary()` */
+  async summarize(opts = {}) { return this.getStartupSummary(opts); }
+
+  /** @deprecated use `remove()` */
+  async forget(id, reason = "explicit forget", opts = {}) {
+    return this.remove(id, { ...opts, reason });
+  }
+
+  /** @deprecated use `consolidate()` */
+  async consolidateSession(opts = {}) { return this.consolidate(opts); }
+
+  /** @deprecated use `annotate(id, { memoryType: "long-term" })` */
+  async promote(id, opts = {}) {
+    return this.annotate(id, { memoryType: "long-term", allowedWorkspaces: opts.allowedWorkspaces });
+  }
+
+  /** @deprecated — scope does not carry workspace filtering; call engine.listEntities directly. */
+  async getWorkingMemory(opts = {}) {
+    return this._engine.listEntities({
+      memoryType: "working",
+      limit: opts.limit || 50,
+      workspaceId: opts.workspaceId || this.workspaceId,
+      allowedWorkspaces: opts.allowedWorkspaces,
+    });
   }
 }
 
-module.exports = { AgentMemory };
+/**
+ * Deprecated alias for `MemoryScope`. Prefer `kalairos.scope(...)`.
+ * Kept so `new AgentMemory(engine, { name })` and direct imports keep working.
+ * @deprecated
+ */
+const AgentMemory = MemoryScope;
+
+module.exports = { MemoryScope, AgentMemory };
