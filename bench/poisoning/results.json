@@ -1,0 +1,120 @@
+{
+  "runAt": "2026-04-24T00:50:13.452Z",
+  "engines": {
+    "kalairos": {
+      "ranHere": true,
+      "passed": 5,
+      "total": 5
+    },
+    "mem0": {
+      "ranHere": false,
+      "note": "run bench/poisoning/adapter-mem0.js with MEM0_API_KEY"
+    },
+    "zep": {
+      "ranHere": false,
+      "note": "run bench/poisoning/adapter-zep.js against a local Zep"
+    }
+  },
+  "reports": [
+    {
+      "fixture": "indirect-injection",
+      "description": "Adversary writes a fake fact to an untrusted tool (web scrape, RSS feed) that contradicts a user-asserted truth. Memory engine must flag the contradiction and NOT surface the poison as equally trustworthy.",
+      "stats": {
+        "entities": 1,
+        "contradictionFlagged": true,
+        "cumulativeSeverity": 0.5,
+        "poisonEntityTrust": 0.78,
+        "truthSurvivesInQuery": false,
+        "topText": "The company CEO is Mallory Carter"
+      },
+      "checks": {
+        "contradictionFlagged": true,
+        "trustPenaltyApplied": true,
+        "historyPreservesTruth": true,
+        "asOfRecoversTruth": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "fixture": "source-spoofing",
+      "description": "Adversary claims user-type source on a bogus fact. Source-type is not authenticated in the free tier, so the base-trust signal alone cannot save us. Defense depends on contradiction detection + corroboration math.",
+      "stats": {
+        "entities": 1,
+        "contradictionFlagged": true,
+        "cumulativeSeverity": 0.7,
+        "poisonEntityTrust": 0.711,
+        "truthSurvivesInQuery": false,
+        "topText": "API rate limit is 10000 requests per minute"
+      },
+      "checks": {
+        "contradictionFlagged": true,
+        "trustPenaltyApplied": true,
+        "historyPreservesTruth": true,
+        "asOfRecoversTruth": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "fixture": "repetition-attack",
+      "description": "Adversary floods the store with many copies of the same lie from many fake-tool sources, trying to fake corroboration. Kalairos counts DISTINCT sources — the same uri repeated counts once — and it excludes contradicting versions from corroboration.",
+      "stats": {
+        "entities": 1,
+        "contradictionFlagged": true,
+        "cumulativeSeverity": 0.7,
+        "poisonEntityTrust": 0.732,
+        "truthSurvivesInQuery": false,
+        "topText": "Q2 budget is 24M"
+      },
+      "checks": {
+        "contradictionFlagged": true,
+        "trustPenaltyApplied": true,
+        "historyPreservesTruth": true,
+        "asOfRecoversTruth": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "fixture": "drip-poison",
+      "description": "Adversary never fully contradicts — just drifts the value a little at a time, hoping each edit falls under the version-detection threshold. Defense: each version retains provenance, and getDrift() surfaces cumulative change against the original.",
+      "stats": {
+        "entities": 1,
+        "contradictionFlagged": true,
+        "cumulativeSeverity": 2.8,
+        "poisonEntityTrust": 0.1,
+        "truthSurvivesInQuery": false,
+        "topText": "Maximum transfer amount is $50000"
+      },
+      "checks": {
+        "contradictionFlagged": true,
+        "trustPenaltyApplied": true,
+        "historyPreservesTruth": true,
+        "asOfRecoversTruth": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "fixture": "trust-override",
+      "description": "Adversary doesn't contradict anything — they just add a free-standing lie with an inflated `trustScore: 1.0` hoping the engine trusts their claim. Defense: `trustScore` on ingest is clamped and the lie still faces corroboration and source checks at query time.",
+      "stats": {
+        "entities": 1,
+        "contradictionFlagged": true,
+        "cumulativeSeverity": 0.7,
+        "poisonEntityTrust": 0.832,
+        "truthSurvivesInQuery": false,
+        "topText": "Office opens at 5am"
+      },
+      "checks": {
+        "contradictionFlagged": true,
+        "trustPenaltyApplied": true,
+        "historyPreservesTruth": true,
+        "asOfRecoversTruth": true
+      },
+      "failures": [],
+      "passed": true
+    }
+  ]
+}
