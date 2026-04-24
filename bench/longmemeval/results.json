@@ -1,0 +1,119 @@
+{
+  "runAt": "2026-04-23T20:37:17.368Z",
+  "dataset": "/Users/birajthapa/Desktop/kalairos/bench/longmemeval/sample.json",
+  "node": "v23.7.0",
+  "embedder": "deterministic bag-of-words, dim=64",
+  "summary": {
+    "overall": {
+      "n": 6,
+      "top1": 0.5,
+      "top5": 1,
+      "routing": 1
+    },
+    "types": [
+      {
+        "question_type": "single-session-user",
+        "n": 2,
+        "top1": 1,
+        "top5": 1,
+        "routing": 1
+      },
+      {
+        "question_type": "single-session-preference",
+        "n": 1,
+        "top1": 1,
+        "top5": 1,
+        "routing": 1
+      },
+      {
+        "question_type": "multi-session",
+        "n": 1,
+        "top1": 0,
+        "top5": 1,
+        "routing": 1
+      },
+      {
+        "question_type": "knowledge-update",
+        "n": 1,
+        "top1": 0,
+        "top5": 1,
+        "routing": 1
+      },
+      {
+        "question_type": "single-session-assistant",
+        "n": 1,
+        "top1": 0,
+        "top5": 1,
+        "routing": 1
+      }
+    ]
+  },
+  "rows": [
+    {
+      "question_id": "sample-ssu-01",
+      "question_type": "single-session-user",
+      "question": "What time do I usually go to bed?",
+      "answer": "11 PM",
+      "ingestedUtterances": 3,
+      "top1Hit": true,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] I'm trying to sleep earlier lately, usually around 11 PM on weekdays."
+    },
+    {
+      "question_id": "sample-ssu-02",
+      "question_type": "single-session-user",
+      "question": "What did I eat for breakfast this morning?",
+      "answer": "oatmeal with berries",
+      "ingestedUtterances": 3,
+      "top1Hit": true,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] Had oatmeal with berries for breakfast this morning."
+    },
+    {
+      "question_id": "sample-ssp-01",
+      "question_type": "single-session-preference",
+      "question": "Do I prefer window or aisle seats on flights?",
+      "answer": "window",
+      "ingestedUtterances": 1,
+      "top1Hit": true,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] I always book window seats on flights — I like looking out."
+    },
+    {
+      "question_id": "sample-ms-01",
+      "question_type": "multi-session",
+      "question": "Where is my parents' new apartment located?",
+      "answer": "Berlin",
+      "ingestedUtterances": 4,
+      "top1Hit": false,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] My parents are apartment-hunting in Europe."
+    },
+    {
+      "question_id": "sample-ku-01",
+      "question_type": "knowledge-update",
+      "question": "Which company do I currently work for?",
+      "answer": "Stripe",
+      "ingestedUtterances": 2,
+      "top1Hit": false,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] I've been at Google for six years as a software engineer."
+    },
+    {
+      "question_id": "sample-ssa-01",
+      "question_type": "single-session-assistant",
+      "question": "What Python formatter did the assistant recommend?",
+      "answer": "black",
+      "ingestedUtterances": 3,
+      "top1Hit": false,
+      "top5Hit": true,
+      "correctSessionHit": true,
+      "topText": "[session 0] [user] Any good Python formatter?"
+    }
+  ]
+}

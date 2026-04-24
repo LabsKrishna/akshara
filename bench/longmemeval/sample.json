@@ -1,0 +1,92 @@
+[
+  {
+    "question_id": "sample-ssu-01",
+    "question_type": "single-session-user",
+    "question": "What time do I usually go to bed?",
+    "answer": "11 PM",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "I'm trying to sleep earlier lately, usually around 11 PM on weekdays." },
+        { "role": "assistant", "content": "That's a healthy target." },
+        { "role": "user",      "content": "I might watch a movie tonight though." }
+      ]
+    ],
+    "answer_session_ids": [0]
+  },
+  {
+    "question_id": "sample-ssu-02",
+    "question_type": "single-session-user",
+    "question": "What did I eat for breakfast this morning?",
+    "answer": "oatmeal with berries",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "Had oatmeal with berries for breakfast this morning." },
+        { "role": "assistant", "content": "Sounds nutritious." }
+      ],
+      [
+        { "role": "user",      "content": "Thinking about a sandwich for lunch." }
+      ]
+    ],
+    "answer_session_ids": [0]
+  },
+  {
+    "question_id": "sample-ssp-01",
+    "question_type": "single-session-preference",
+    "question": "Do I prefer window or aisle seats on flights?",
+    "answer": "window",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "I always book window seats on flights — I like looking out." }
+      ]
+    ],
+    "answer_session_ids": [0]
+  },
+  {
+    "question_id": "sample-ms-01",
+    "question_type": "multi-session",
+    "question": "Where is my parents' new apartment located?",
+    "answer": "Berlin",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "My parents are apartment-hunting in Europe." },
+        { "role": "assistant", "content": "Where are they considering?" }
+      ],
+      [
+        { "role": "user",      "content": "They narrowed it down to Berlin or Vienna." }
+      ],
+      [
+        { "role": "user",      "content": "They signed a lease in Berlin yesterday. Moving in next month." }
+      ]
+    ],
+    "answer_session_ids": [2]
+  },
+  {
+    "question_id": "sample-ku-01",
+    "question_type": "knowledge-update",
+    "question": "Which company do I currently work for?",
+    "answer": "Stripe",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "I've been at Google for six years as a software engineer." }
+      ],
+      [
+        { "role": "user",      "content": "Today is my last day at Google — I start at Stripe on Monday." }
+      ]
+    ],
+    "answer_session_ids": [1]
+  },
+  {
+    "question_id": "sample-ssa-01",
+    "question_type": "single-session-assistant",
+    "question": "What Python formatter did the assistant recommend?",
+    "answer": "black",
+    "haystack_sessions": [
+      [
+        { "role": "user",      "content": "Any good Python formatter?" },
+        { "role": "assistant", "content": "I'd recommend black — it's opinionated and widely adopted." },
+        { "role": "user",      "content": "Thanks, I'll try it." }
+      ]
+    ],
+    "answer_session_ids": [0]
+  }
+]
