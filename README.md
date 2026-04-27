@@ -5,21 +5,78 @@
 [![license](https://img.shields.io/npm/l/kalairos.svg)](https://github.com/LabsKrishna/kalairos/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/kalairos.svg)](https://www.npmjs.com/package/kalairos)
 
-> **Add durable, time-aware memory to your agent in 3 calls.**
+> **Memory that remembers what was true — not just what's true now.**
 
-Your agent stores a fact. Updates it. Then asks *"what was true last week?"* A vector DB forgets the old embedding. **Kalairos remembers — with a full version trail.**
+---
 
-Local-first. No cloud service. No API key required (bring any embedder). JSONL on disk — human-readable, git-friendly.
+## The problem nobody talks about
+
+Your agent stores a fact. The fact changes. Now you're stuck.
+
+```js
+await memory.remember('Employees must submit reports by Friday');
+// ...two weeks later, policy changes...
+await memory.remember('Deadline changed to Wednesday');
+```
+
+A user gets penalized for missing Wednesday's deadline.
+They protest: *"I followed the rule. Why was I punished?"*
+
+Your system shrugs. It only knows the **latest** rule. The old one is gone.
+
+> Every vector DB has this bug. They overwrite. Or they duplicate and confuse retrieval. Either way, **history disappears.**
+
+This is not a niche problem. It is every:
+
+- **Policy change** that gets applied retroactively
+- **Pricing dispute** where a customer signed up at the old rate
+- **Compliance audit** asking *"what was your retention rule on March 12?"*
+- **Code review** flagging old code against new rules
+- **AI assistant** that contradicts itself because user preferences shifted
+
+If your agent can't answer *"what did we believe at the time?"*, it cannot be trusted to make decisions that outlive a single session.
+
+---
+
+## The fix, in one call
+
+```js
+await kalairos.remember('Employees must submit reports by Friday');
+await kalairos.remember('Deadline changed to Wednesday');
+
+// Today
+await kalairos.query('report deadline');
+// → "Deadline changed to Wednesday"
+
+// What was true last week?
+await kalairos.queryAt('report deadline', lastWeek);
+// → "Employees must submit reports by Friday"
+```
+
+That's it. Same memory. Two answers. Both correct — for their moment in time.
+
+**Without Kalairos:** the system only knows the latest rule. The user looks wrong.
+**With Kalairos:** the system knows what was true *then*. The user can prove they were right.
+
+---
+
+## Install
 
 ```bash
 npm install kalairos
 ```
 
+Local-first. No cloud service. No API key required. Bring any embedder. JSONL on disk — human-readable, git-friendly, easy to back up.
+
+```bash
+npx kalairos demo    # interactive demo, zero config
+```
+
 ---
 
-## Layer 1 — Quick start
+## Layer 1 — Three calls and you're done
 
-Three calls. `init`, `remember`, `query`. That's it.
+`init`, `remember`, `query`. Most agents need nothing more.
 
 ```js
 const kalairos = require('kalairos');
@@ -28,61 +85,55 @@ const embed = async (t) => [...t].map(c => c.charCodeAt(0) / 255); // toy embedd
 await kalairos.init({ embedFn: embed });
 
 await kalairos.remember('User prefers concise bullet points');
-await kalairos.remember('Revenue target is $10M for Q3');
+await kalairos.remember('Customer is on the $10/month plan');
 
-const { results } = await kalairos.query('how should I reply?');
+const { results } = await kalairos.query('what plan are they on?');
 console.log(results[0].text);
 ```
 
 Swap the toy embedder for OpenAI, Cohere, or any `async (text) => number[]` when you're ready.
 
-**Try the interactive demo — zero config:**
-
-```bash
-npx kalairos demo
-```
-
 ---
 
 ## Layer 2 — Time-aware memory
 
-Once the basic loop makes sense, time-travel is one call away. `remember()` detects updates automatically and appends a new version; `queryAt(text, timestamp)` recalls whichever version was current at that point in time; `getHistory(id)` returns the full version trail.
+Once the basic loop makes sense, time-travel is one call away. `remember()` detects updates automatically and appends a new version. `queryAt(text, timestamp)` recalls whichever version was current at that moment. `getHistory(id)` returns the full trail.
 
 ```js
-const id = await kalairos.remember('Revenue target is $10M for Q3');
+const id = await kalairos.remember('Subscription price is $10/month');
 
-// ...later...
-await kalairos.remember('Revenue target revised to $12M for Q3');
+// ...later, pricing changes...
+await kalairos.remember('Subscription price increased to $20/month');
 
 // Current state
-const now = await kalairos.query('revenue target');
-console.log(now.results[0].text);         // → "Revenue target revised to $12M for Q3"
+const now = await kalairos.query('subscription price');
+console.log(now.results[0].text);     // → "$20/month"
 
-// State as we believed it a week ago
-const then = Date.now() - 7 * 24 * 60 * 60 * 1000;
-const past = await kalairos.queryAt('revenue target', then);
-console.log(past.results[0].text);        // → "Revenue target is $10M for Q3"
+// What did we charge this customer when they signed up?
+const signupDate = new Date('2025-03-01').getTime();
+const past = await kalairos.queryAt('subscription price', signupDate);
+console.log(past.results[0].text);    // → "$10/month"
 
 // Full version history with deltas and provenance
 const history = await kalairos.getHistory(id);
 history.versions.forEach(v => console.log(`v${v.version}: ${v.text}`));
 ```
 
-One entity, many versions. Every query picks the version current at its chosen moment. A vector DB can't do this: it only knows the last write.
+One entity, many versions. Every query picks the version current at its chosen moment.
 
 ```mermaid
 flowchart LR
-    subgraph Entity["Entity #42 &mdash; 'Q3 revenue target'"]
+    subgraph Entity["Entity #42 &mdash; 'Subscription price'"]
         direction LR
-        v1["v1<br/>'$10M'<br/>Jan 15"]
-        v2["v2<br/>'$11M'<br/>Feb 20"]
-        v3["v3<br/>'$12M'<br/>Mar 10 &larr; current"]
+        v1["v1<br/>'$10/month'<br/>Jan 15"]
+        v2["v2<br/>'$15/month'<br/>Feb 20"]
+        v3["v3<br/>'$20/month'<br/>Mar 10 &larr; current"]
         v1 --> v2 --> v3
     end
 
-    Q1["query('revenue')<br/><i>today</i>"]            -.->|returns| v3
-    Q2["queryAt('revenue', Feb 25)"]                   -.->|returns| v2
-    Q3["queryAt('revenue', Jan 20)"]                   -.->|returns| v1
+    Q1["query('price')<br/><i>today</i>"]              -.->|returns| v3
+    Q2["queryAt('price', Feb 25)"]                     -.->|returns| v2
+    Q3["queryAt('price', Jan 20)"]                     -.->|returns| v1
     Q4["getHistory(42)"]                               -.->|returns| Entity
 
     classDef current fill:#d4edda,stroke:#28a745,color:#155724
@@ -93,7 +144,21 @@ flowchart LR
     class v1 old
 ```
 
-Versions are **linear per entity** — each new version supersedes the previous one; there is no branching. The "fork" effect happens *across* entities: when a `remember()` falls below the similarity threshold, it creates a new entity instead of a new version. Linearity is what keeps `queryAt(t)` well-defined: there is always one unambiguous answer to "what did we believe about entity X at time T."
+Versions are **linear per entity** — each new version supersedes the previous; there is no branching. The "fork" effect happens *across* entities: when a `remember()` falls below the similarity threshold, it creates a new entity instead of a new version. Linearity is what keeps `queryAt(t)` well-defined: there is always one unambiguous answer to *"what did we believe about entity X at time T."*
+
+---
+
+## Where this earns its keep
+
+| Scenario | The pain | What `queryAt` proves |
+|---|---|---|
+| **Policy change** | "I was penalized for breaking a rule that didn't exist when I acted." | The rule that applied on the date of the action. |
+| **Pricing dispute** | "I signed up at $10. Why am I being charged $20?" | The price at the moment of signup. |
+| **Compliance audit** | "What was your data retention policy on March 12?" | The policy as it stood on March 12. |
+| **Engineering review** | Old code flagged against rules that didn't exist when it was written. | The rule as it was when the code was committed. |
+| **Drifting AI agent** | Assistant flips between contradictory user preferences with no record of why. | The preference at any past turn — and the full trail of changes. |
+
+If your product makes promises that outlive the moment, you need memory that does too.
 
 ---
 
@@ -145,9 +210,9 @@ const { results } = await support.query('checkout');
 
 ---
 
-## Why not just use a vector database?
+## What Kalairos gives you
 
-|                                | Vector DB              | Kalairos                               |
+|                                | Plain vector store     | Kalairos                             |
 | ------------------------------ | ---------------------- | ------------------------------------ |
 | **Updates**                    | Overwrite or duplicate | Automatic versioning                 |
 | **History**                    | None                   | Full version trail with deltas       |
