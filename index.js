@@ -503,14 +503,23 @@ function _persistAll() {
   try {
     const result = store.persistAll(rows, CFG);
     if (result && typeof result.catch === "function") {
+      // Async store (e.g. KalairosStore on enterprise). We can't make the
+      // sync write-lock body await, so emit + log + rethrow on the next tick.
+      // The originating ingest already returned by then; surfacing the error
+      // via the signal bus is the best we can do.
       result.catch(err => {
         emitError(Err.persistFailed(err.message, err));
         console.error(`[kalairos] PersistAll failed: ${err.message}`);
       });
     }
   } catch (err) {
+    // Sync store path (FileStore). Rethrow so the caller (typically ingest())
+    // rejects with the I/O error instead of acknowledging a write that didn't
+    // reach disk. In-memory state is now divergent from disk; the next process
+    // start re-loads from disk, which is the source of truth.
     emitError(Err.persistFailed(err.message, err));
     console.error(`[kalairos] Persistence failed: ${err.message}`);
+    throw err;
   }
 }
 
@@ -528,6 +537,7 @@ function _appendEntity(entity) {
   } catch (err) {
     emitError(Err.persistFailed(err.message, err));
     console.error(`[kalairos] Append entity failed: ${err.message}`);
+    throw err;
   }
 }
 

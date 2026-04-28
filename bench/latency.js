@@ -156,6 +156,33 @@ async function runScale(n, queryCount) {
   console.log("");
   console.log(`  Wrote ${outPath}`);
   console.log("");
+
+  // ── Budget enforcement ─────────────────────────────────────────────────────
+  // Per CLAUDE.md §17, named latency budgets are CI-gated. We enforce only
+  // when KALAIROS_LATENCY_BUDGET_ENFORCE is set, so local dev runs stay
+  // informational. CI sets both env vars; the 1k threshold is calibrated to
+  // a generous multiple of the M-series number documented in BENCH.md so
+  // shared CI runners can pass without flake.
+  if (process.env.KALAIROS_LATENCY_BUDGET_ENFORCE) {
+    const budgetAt1k = Number(process.env.KALAIROS_LATENCY_BUDGET_P95_MS_AT_1K || 100);
+    const result1k = results.find(r => r.entities === 1000);
+    if (!result1k) {
+      console.error("  Budget check requested but no 1k result found. Failing.");
+      process.exit(1);
+    }
+    if (result1k.p95 > budgetAt1k) {
+      console.error(
+        `  LATENCY BUDGET MISS: p95 at 1k = ${result1k.p95.toFixed(2)}ms ` +
+        `exceeds budget ${budgetAt1k}ms`
+      );
+      console.error("  See BENCH.md for the budget rationale and how to amend it.");
+      process.exit(1);
+    }
+    console.log(
+      `  Latency budget: p95 at 1k = ${result1k.p95.toFixed(2)}ms ≤ ${budgetAt1k}ms ✓`
+    );
+    console.log("");
+  }
 })().catch(err => {
   console.error(err);
   process.exit(1);

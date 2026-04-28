@@ -22,6 +22,20 @@ let _createAgentWarned = false;
 function connect(baseUrl = "http://localhost:3000", { token } = {}) {
   const base = baseUrl.replace(/\/$/, "");
 
+  // Bearer tokens over plain HTTP to a non-loopback host leak credentials.
+  // We don't refuse the connection — local proxies and dev tunnels are valid
+  // use cases — but we warn loudly so the misconfig is visible in logs.
+  if (token && /^http:\/\//i.test(base)) {
+    const host = base.replace(/^http:\/\//i, "").split("/")[0].split(":")[0];
+    const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+    if (!isLoopback) {
+      console.warn(
+        `[kalairos] WARNING: connecting to ${base} with a bearer token over plain HTTP. ` +
+        `The token will be sent in cleartext. Use https:// for any non-loopback host.`
+      );
+    }
+  }
+
   function _headers() {
     const h = { "Content-Type": "application/json" };
     if (token) h["Authorization"] = `Bearer ${token}`;

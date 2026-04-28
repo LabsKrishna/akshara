@@ -20,3 +20,32 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run bench
+
+  poisoning:
+    # CLAUDE.md §17: poisoning benchmark is a CI gate. The runner already
+    # exits non-zero when any fixture is compromised; running it here makes
+    # the gate enforceable.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run bench:poisoning
+
+  latency:
+    # CLAUDE.md §17: named latency budgets are CI-gated. Threshold is
+    # calibrated for shared GitHub runners (slower than M-series local dev);
+    # see BENCH.md for the per-scale numbers and how to amend the budget.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run bench:latency
+        env:
+          KALAIROS_LATENCY_BUDGET_ENFORCE: "1"
+          KALAIROS_LATENCY_BUDGET_P95_MS_AT_1K: "150"

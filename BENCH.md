@@ -43,6 +43,26 @@ Ingest throughput (for context, not budgeted):
 | p95 at 1k         | < 50 ms | 25 ms   | **PASS** |
 | p95 at 10k        | < 50 ms | 321 ms  | **MISS — ~6.4× over** |
 
+### CI enforcement
+
+The CI workflow runs `bench/latency.js` with the budget assertion enabled:
+
+```bash
+KALAIROS_LATENCY_BUDGET_ENFORCE=1 \
+KALAIROS_LATENCY_BUDGET_P95_MS_AT_1K=150 \
+node bench/latency.js
+```
+
+The CI threshold (150 ms at 1k) is intentionally slacker than the published
+target (50 ms) because shared GitHub runners are noisier and slower than the
+M-series laptop the headline numbers were captured on. The job exists to catch
+*regressions*, not to re-litigate the laptop number on every PR. If the budget
+needs to change, amend `.github/workflows/ci.yml` and document the new number
+in this table.
+
+The 10k row is **not** gated — it's a known unmet aspiration tracked in the
+"Work queued against this budget" section below.
+
 ### Interpretation
 
 - **At Persona-A scale (1k entities)**, Kalairos comfortably meets the target. This is the scale that covers most indie / OSS-dev use cases today — a single agent accumulating memory across days or weeks.

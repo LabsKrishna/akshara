@@ -58,8 +58,11 @@ if (_RATE_LIMIT > 0) {
 }
 
 // ─── Input validation helpers ─────────────────────────────────────────────────
+// Defer to the core's KALAIROS_MAX_TEXT_LEN (default 5 KB). A request the
+// server accepts must also pass core validation, otherwise we'd return 200
+// for ingest paths that fail downstream with ERR_TEXT_TOO_LONG.
 
-const _MAX_TEXT_LEN = Number(process.env.KALAIROS_MAX_TEXT_LEN ?? 50_000); // 50 KB
+const _MAX_TEXT_LEN = Number(process.env.KALAIROS_MAX_TEXT_LEN ?? 5_000);
 
 function _validateText(text) {
   if (!text || typeof text !== "string") return "text must be a non-empty string";

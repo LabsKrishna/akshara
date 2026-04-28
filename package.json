@@ -31,7 +31,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test-basic.js && node test-versioning.js && node test-agent-simulation.js",
+    "test": "node test-basic.js && node test-versioning.js && node test-agent-simulation.js && node test-scope.js",
     "bench": "node bench/agent-memory/run-all.js",
     "bench:real": "node bench/agent-memory/bench-eval-real.js",
     "bench:latency": "node bench/latency.js",
