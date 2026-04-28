@@ -375,6 +375,29 @@ kalairos.onSignal(code, callback)
 kalairos.getSignals(code?)
 ```
 
+### Grouped namespaces (advanced)
+
+Every API above is also reachable through topic namespaces. The flat calls
+remain canonical for the 1.x line — namespaces are an organizational aid for
+codebases that prefer grouped imports.
+
+```js
+kalairos.history    // getHistory, getChangeSince, getContradictions, getDrift,
+                    // buildChangelog, trail, checkpoint, getCheckpoint, listCheckpoints
+kalairos.trust      // annotate
+kalairos.graph      // getGraph, traverse, consolidate
+kalairos.io         // ingestBatch, ingestFile, ingestTimeSeries,
+                    // exportMarkdown, importMarkdown
+kalairos.signals    // onSignal, getSignals
+kalairos.auth       // workspace ACL
+```
+
+```js
+import { history, io } from "kalairos";
+await io.ingestFile("./notes.md");
+const trail = await history.trail({ entity: id });
+```
+
 ---
 
 ## Configuration

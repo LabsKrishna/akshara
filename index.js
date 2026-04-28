@@ -2683,6 +2683,47 @@ function createAgent(opts = {}) {
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
+const _onSignal  = require("./errors").onSignal;
+const _getSignals = require("./errors").getSignals;
+
+// Grouped namespaces (advanced API surface).
+// The flat exports below remain canonical for the 1.x line — these namespaces
+// are additive and exist to keep the top-level export from sprawling further.
+const history = {
+  getHistory,
+  getChangeSince,
+  getContradictions,
+  getDrift,
+  buildChangelog,
+  trail,
+  checkpoint,
+  getCheckpoint,
+  listCheckpoints,
+};
+
+const trust = {
+  annotate,
+};
+
+const graph = {
+  getGraph,
+  traverse,
+  consolidate,
+};
+
+const io = {
+  ingestBatch,
+  ingestFile,
+  ingestTimeSeries,
+  exportMarkdown,
+  importMarkdown,
+};
+
+const signals = {
+  onSignal:   _onSignal,
+  getSignals: _getSignals,
+};
+
 module.exports = {
   init,
   ingest,
@@ -2731,6 +2772,12 @@ module.exports = {
   // Auth & Workspace ACL
   auth: _auth,
   // Error → Signal → Learning Loop
-  onSignal:     require("./errors").onSignal,
-  getSignals:   require("./errors").getSignals,
+  onSignal:   _onSignal,
+  getSignals: _getSignals,
+  // Grouped namespaces
+  history,
+  trust,
+  graph,
+  io,
+  signals,
 };

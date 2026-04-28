@@ -43,6 +43,12 @@ export const {
   auth,
   onSignal,
   getSignals,
+  // Grouped namespaces (advanced API surface)
+  history,
+  trust,
+  graph,
+  io,
+  signals,
 } = lib;
 
 // Default export — the full library object.
