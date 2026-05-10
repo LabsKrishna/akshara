@@ -45,6 +45,7 @@ const Codes = {
   ALREADY_DELETED:    "ERR_ALREADY_DELETED",
   EMBEDDING_FAILED:   "ERR_EMBEDDING_FAILED",
   PERSIST_FAILED:     "ERR_PERSIST_FAILED",
+  INDEX_WRITE_FAILED: "ERR_INDEX_WRITE_FAILED",
   LOAD_FAILED:        "ERR_LOAD_FAILED",
   VALIDATION:         "ERR_VALIDATION",
   WORKER_FAILED:      "ERR_WORKER_FAILED",
@@ -159,6 +160,17 @@ const Err = {
     new KalairosError(Codes.PERSIST_FAILED, `Persistence failed: ${detail}`, {
       recoverable: true,
       suggestion: "Check disk space and file permissions.",
+      context: { cause: cause?.code || cause?.message },
+    }),
+
+  // Emitted when the SQLite hybrid-index UPSERT throws after a successful
+  // JSONL append+fsync. The caller's write is still acked because JSONL is
+  // canonical (spec §15); meta.dirty=1 ensures the next start triggers
+  // a clean rebuild from JSONL. Recoverable from the user's perspective.
+  indexWriteFailed: (detail, cause) =>
+    new KalairosError(Codes.INDEX_WRITE_FAILED, `SQLite index write failed: ${detail}`, {
+      recoverable: true,
+      suggestion: "JSONL is canonical and the write is durable. The SQLite index will be rebuilt on the next start.",
       context: { cause: cause?.code || cause?.message },
     }),
 
