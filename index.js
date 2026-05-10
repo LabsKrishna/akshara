@@ -24,6 +24,13 @@ const {
   makeVersionId:           _makeVersionId,
   normalizeRaw:            _normalizeRaw,
 } = require("./store/entity-normalizer");
+// SQLite hybrid index (KAL-108). Loaded lazily inside _initSqliteIndex so
+// users with KALAIROS_INDEX_SQLITE unset never pay the require cost.
+let _sqliteModule = null;
+function _loadSqliteModule() {
+  if (!_sqliteModule) _sqliteModule = require("./store/sqlite-index");
+  return _sqliteModule;
+}
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +75,7 @@ let _initialized = false;
 let _skipIO        = 0;    // ref-counted; > 0 suppresses per-item I/O during batch ops
 let _pendingWrites = [];   // { fn, resolve, reject } — drain-based write queue
 let _draining      = false;// true while _drainWrites() is scheduled or running
+let _sqliteIdx     = null; // SqliteIndex instance when KALAIROS_INDEX_SQLITE=1; else null
 const _auth        = new AuthStore();
 
 // Monotonically increasing ID — guarantees uniqueness even within the same ms.
@@ -343,11 +351,50 @@ async function init(overrides = {}) {
   await _loadStore();
   _loadCheckpoints();
 
+  // Optional SQLite hybrid index (KAL-108). Off by default; the flag flips
+  // ON only after KAL-110 fuzz testing passes. When ON, we run the §6.2
+  // boot decision tree so the index is in sync before the first write.
+  await _initSqliteIndex();
+
   _pool = new WorkerPool(os.cpus().length);
   _pool.start();
 
   _initialized = true;
   return { config: _safeConfig(), size: store.size };
+}
+
+// ─── SQLite hybrid index — boot integration (KAL-108) ────────────────────────
+//
+// Compute the canonical SQLite path next to the JSONL data file. Returns
+// null for in-memory or unset stores — there's no persistent index to keep
+// in sync if the JSONL itself isn't on disk.
+function _sqlitePathFor(dataFile) {
+  if (!dataFile || dataFile === ":memory:") return null;
+  return dataFile + ".sqlite";
+}
+
+// Open the index in whatever state matches the JSONL on disk. Runs the
+// §6.2 decision tree, executes the chosen action (rebuild / replay / open
+// as-is), and assigns the live index to the module-level `_sqliteIdx`.
+//
+// No-op when KALAIROS_INDEX_SQLITE is unset or the data file is :memory:.
+async function _initSqliteIndex() {
+  if (process.env.KALAIROS_INDEX_SQLITE !== "1") return;
+  const sqlitePath = _sqlitePathFor(CFG.dataFile);
+  if (!sqlitePath) return;
+
+  const { SqliteIndex, rebuild, replayForward, decideOnBoot } = _loadSqliteModule();
+  const decision = decideOnBoot({ jsonlPath: CFG.dataFile, sqlitePath });
+
+  if (decision.action === "REBUILD") {
+    await rebuild({ jsonlPath: CFG.dataFile, sqlitePath });
+  } else if (decision.action === "REPLAY") {
+    await replayForward({ jsonlPath: CFG.dataFile, sqlitePath });
+  }
+  // READY: nothing to do; just open below.
+
+  _sqliteIdx = new SqliteIndex();
+  _sqliteIdx.open(sqlitePath);
 }
 
 function _safeConfig() {
@@ -381,6 +428,20 @@ function _serializeForIO(entity) {
 
 function _persistAll() {
   if (_skipIO > 0) return;
+
+  // KAL-108 stopgap: capture file size before the rewrite. After the write,
+  // if size changed, the SQLite index's per-row jsonl_offset bookkeeping is
+  // stale and we mark dirty so the next start rebuilds. We deliberately do
+  // NOT mark dirty unconditionally because shutdown's "final flush" rewrites
+  // the file with byte-identical content, and that would put us in an
+  // infinite "always rebuild on every restart" loop. KAL-109 replaces this
+  // stopgap with proper truncate+replay in the same critical section.
+  let beforeSize = null;
+  if (_sqliteIdx && CFG.dataFile && CFG.dataFile !== ":memory:") {
+    try { beforeSize = fs.existsSync(CFG.dataFile) ? fs.statSync(CFG.dataFile).size : 0; }
+    catch { beforeSize = null; }
+  }
+
   const rows = Array.from(store.values()).map(_serializeForIO);
   try {
     const result = store.persistAll(rows, CFG);
@@ -403,6 +464,27 @@ function _persistAll() {
     console.error(`[kalairos] Persistence failed: ${err.message}`);
     throw err;
   }
+
+  // Compare file sizes to detect a real content change vs a no-op flush.
+  // Different size ⇒ JSONL bytes diverged from what SQLite recorded ⇒ mark
+  // dirty for next-start rebuild. Same caveat as the boot tree's branch d
+  // (only first 4 KB hashed): a same-size content-change past the first
+  // 4 KB stays undetected — KAL-109's truncate+replay closes that gap.
+  //
+  // Edge case: an empty store rewriting persistAll writes "\n" (1 byte) for
+  // 0 rows, taking the file from "didn't exist" (size 0) to "1 byte". That
+  // transition is not a real divergence — SQLite is also empty — so we
+  // skip the dirty mark when both ends are effectively empty.
+  if (_sqliteIdx && beforeSize !== null) {
+    try {
+      const afterSize = fs.existsSync(CFG.dataFile) ? fs.statSync(CFG.dataFile).size : 0;
+      const isFreshEmpty = rows.length === 0 && beforeSize <= 1 && afterSize <= 1;
+      if (afterSize !== beforeSize && !isFreshEmpty) _sqliteIdx.markDirty();
+    } catch {
+      // Unable to stat after persistAll — be conservative and mark dirty.
+      _sqliteIdx.markDirty();
+    }
+  }
 }
 
 function _appendEntity(entity) {
@@ -420,6 +502,38 @@ function _appendEntity(entity) {
     emitError(Err.persistFailed(err.message, err));
     console.error(`[kalairos] Append entity failed: ${err.message}`);
     throw err;
+  }
+  // SQLite mirror runs AFTER the canonical JSONL append+fsync succeeded.
+  // If this throws, JSONL is still durable so the caller's write is acked;
+  // we mark dirty=1 and emit a signal so the next start triggers REBUILD.
+  _mirrorToSqlite(entity, row);
+}
+
+// Mirror one live write into the SQLite hybrid index (KAL-108, spec §4).
+//
+// Failure handling:
+//   * JSONL is canonical and already durable when we get here.
+//   * If the SQLite txn throws, set meta.dirty=1 (best-effort), emit an
+//     ERR_INDEX_WRITE_FAILED signal, and SWALLOW the error so the caller's
+//     ingest still resolves. The next start's decideOnBoot will see dirty=1
+//     and trigger REBUILD via §6.2 branch (h).
+function _mirrorToSqlite(entity, row) {
+  if (!_sqliteIdx?.db) return;
+  try {
+    // Compute lineStart to match the rebuild path's per-row jsonl_offset
+    // semantic. file-store.js writes `JSON.stringify(row) + "\n"`; the line
+    // we just wrote starts at sizeAfter - byteLength(line).
+    const line       = JSON.stringify(row) + "\n";
+    const lineLen    = Buffer.byteLength(line, "utf8");
+    const sizeAfter  = fs.statSync(CFG.dataFile).size;
+    const lineStart  = sizeAfter - lineLen;
+    _sqliteIdx.applyEntity(entity, lineStart, sizeAfter);
+  } catch (err) {
+    if (_sqliteIdx) _sqliteIdx.markDirty();
+    emitError(Err.indexWriteFailed(err.message, err));
+    console.error(`[kalairos] SQLite mirror failed: ${err.message}`);
+    // Intentional: do NOT rethrow. JSONL is canonical; the caller's write
+    // is durable on disk. Next start will rebuild SQLite from JSONL.
   }
 }
 
@@ -2531,6 +2645,7 @@ async function shutdown() {
   _persistAll(); // final flush to backing store
   if (_pool) { await _pool.stop(); _pool = null; }
   if (store?.shutdown) await store.shutdown();
+  if (_sqliteIdx) { _sqliteIdx.close(); _sqliteIdx = null; }
   _initialized = false;
   console.log("[kalairos] Shutdown complete");
 }

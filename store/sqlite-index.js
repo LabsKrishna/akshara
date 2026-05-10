@@ -15,8 +15,12 @@
 //     tree returning READY / REPLAY / REBUILD (KAL-106). Pure, no mutations.
 //   * replayForward({ jsonlPath, sqlitePath }) — apply only the JSONL bytes
 //     beyond meta.last_jsonl_offset, in one transaction (KAL-107).
+//   * SqliteIndex.applyEntity(row, jsonlOffset) — per-write UPSERT used by
+//     the live write path under KALAIROS_INDEX_SQLITE=1 (KAL-108).
+//   * SqliteIndex.markDirty() — best-effort meta.dirty=1 flag for the boot
+//     decision tree to pick up after a failed write txn (KAL-108, §4).
 //
-// Write path, query API land in later tickets.
+// Query API and CLI land in later tickets.
 "use strict";
 
 const Database = require("better-sqlite3");
@@ -134,6 +138,7 @@ class SqliteIndex {
   constructor() {
     this.db = null;
     this.path = null;
+    this.stmts = null;  // prepared statements cached at open() for the write path
   }
 
   // Open the index at `path`. Idempotent: a second call with the same path
@@ -151,6 +156,11 @@ class SqliteIndex {
     applySchemaV1(db);
     this.db = db;
     this.path = path;
+    // Prepare the write-path statements once and reuse for every applyEntity()
+    // — better-sqlite3 prepare is fast but not free, and the write path runs
+    // inside the user's critical section. Cache + reuse keeps per-write cost
+    // well under the §4 latency budget.
+    this.stmts = _prepareWriteStmts(db);
   }
 
   close() {
@@ -158,6 +168,7 @@ class SqliteIndex {
     try { this.db.close(); } finally {
       this.db = null;
       this.path = null;
+      this.stmts = null;
     }
   }
 
@@ -177,6 +188,48 @@ class SqliteIndex {
       synchronous,
       schemaVersion,
     };
+  }
+
+  // Apply one entity's UPSERTs in a single transaction (KAL-108, spec §4).
+  // Mirrors the rebuild path's row mapping but updates meta with the
+  // current jsonl byte offset so the boot decision tree (§6.2) can detect
+  // divergence. Throws on SQLite failure — caller should mark dirty.
+  //
+  // Uses manual BEGIN IMMEDIATE / COMMIT instead of db.transaction(fn) so
+  // the meta upserts share the same explicit txn frame as _applyEntity's
+  // row inserts — the wrapped-function pattern was masking a bug where the
+  // implicit savepoint for the inner statements was committing without the
+  // meta updates being visible to subsequent reads.
+  applyEntity(row, jsonlOffset, jsonlSizeAfter) {
+    if (!this.db || !this.stmts) {
+      throw new Error("SqliteIndex.applyEntity: index is not open");
+    }
+    const sizeAfter = jsonlSizeAfter ?? jsonlOffset;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      _applyEntity(this.stmts, row, jsonlOffset);
+      this.stmts.upsertMeta.run("jsonl_size_bytes",  String(sizeAfter));
+      this.stmts.upsertMeta.run("last_jsonl_offset", String(sizeAfter));
+      this.db.exec("COMMIT");
+    } catch (err) {
+      try { this.db.exec("ROLLBACK"); } catch {}
+      throw err;
+    }
+  }
+
+  // Best-effort dirty flag: when the live write txn throws, set meta.dirty=1
+  // so the next start's decideOnBoot triggers REBUILD via branch (h). Runs
+  // outside a transaction (the prior one already failed) and swallows its
+  // own errors — if even the dirty write fails, JSONL is still canonical
+  // and the user's data is intact.
+  markDirty() {
+    if (!this.db) return;
+    try {
+      this.db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)")
+        .run("dirty", "1");
+    } catch {
+      // Intentional swallow — see method-level comment.
+    }
   }
 
   // Stream-rebuild this index from a JSONL file (spec §7). Closes self if
@@ -340,6 +393,11 @@ function _prepareWriteStmts(db) {
       INSERT OR IGNORE INTO links (src_id, dst_id, kind, created_at)
       VALUES (@src_id, @dst_id, @kind, @created_at)
     `),
+    // Live writes mutate an entity's link set; delete-then-insert is the
+    // simplest way to keep SQLite in sync when a link is removed. On the
+    // rebuild path's empty tmp DB this is a no-op for the first visit and
+    // correct for re-writes of the same entity in later JSONL lines.
+    deleteLinksBySrc: db.prepare(`DELETE FROM links WHERE src_id = ?`),
     upsertMeta: db.prepare(`
       INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)
     `),
@@ -390,6 +448,11 @@ function _applyEntity(stmts, raw, jsonlOffset) {
   // Legacy entity links carry no per-link kind. We use a stable sentinel
   // ("related") so the (src_id, dst_id, kind) PK is well-defined and
   // deterministic across rebuilds. KAL-108+ may introduce typed kinds.
+  //
+  // Delete-before-insert keeps live re-writes correct: if a later line in
+  // JSONL drops a link, that drop must reflect in SQLite. On the rebuild
+  // path (fresh tmp DB), the delete is a no-op for first visits.
+  stmts.deleteLinksBySrc.run(id);
   if (raw.links && typeof raw.links.forEach === "function") {
     raw.links.forEach(dst => {
       stmts.insertLink.run({
